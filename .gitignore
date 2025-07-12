@@ -1,0 +1,16 @@
+#node packages
+node_modules/
+
+
+# envs
+.env
+.env.local
+.env.*.local
+
+# build and temp dev
+/build/
+/dist/
+/.svelte-kit
+
+# OS-generated 
+.DS_Store
