@@ -1,6 +1,8 @@
 #node packages
 node_modules/
 
+#code
+.vscode
 
 # envs
 .env

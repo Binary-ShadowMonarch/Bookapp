@@ -2,8 +2,7 @@
 <script lang="ts">
     import { Book } from 'lucide-svelte';
 
-  // No props needed for this example, 
-  // but you could export let onSignUp: () => void; etc.
+
 </script>
 
 <div class="container">
