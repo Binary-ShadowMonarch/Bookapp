@@ -41,7 +41,6 @@
       const metadata = await parseEpubMetadata(file);
       
       // Upload to MinIO
-      await uploadToMinio(file, metadata.id);
       
       // Create book object matching your interface
       const book: Book = {
@@ -111,22 +110,6 @@
     });
   }
   
-  async function uploadToMinio(file: File, bookId: string) {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('bookId', bookId);
-    
-    const response = await fetch('/api/upload-epub', {
-      method: 'POST',
-      body: formData
-    });
-    
-    if (!response.ok) {
-      throw new Error('Upload failed');
-    }
-    
-    return await response.json();
-  }
   
   function triggerFileSelect() {
     fileInput.click();

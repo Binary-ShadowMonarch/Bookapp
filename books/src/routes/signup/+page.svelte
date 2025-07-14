@@ -1,4 +1,4 @@
-
+<!-- signup +page.svelte -->
 <script lang="ts">
   import Signup from '$lib/Signup.svelte';
 

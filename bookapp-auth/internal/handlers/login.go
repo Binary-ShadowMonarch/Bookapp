@@ -1,10 +1,12 @@
+// internal/handlers/login.go
+
 package handlers
 
 import (
+	"bookapp/internal/auth"
 	"fmt"
 	"net/http"
-
-	"bookapp/internal/auth"
+	"time"
 )
 
 func LoginHandler(svc *auth.Service) http.HandlerFunc {
@@ -15,13 +17,26 @@ func LoginHandler(svc *auth.Service) http.HandlerFunc {
 		}
 		mail := r.FormValue("mail")
 		pw := r.FormValue("password")
-		token, err := svc.Login(mail, pw)
+
+		accessToken, refreshToken, err := svc.Login(mail, pw)
 		if err != nil {
 			http.Error(w, "invalid credentials", http.StatusUnauthorized)
 			return
 		}
-		// return JSON instead of cookies:
+
+		// Set the long-lived refresh token as a secure, HttpOnly cookie
+		http.SetCookie(w, &http.Cookie{
+			Name:     "refresh_token",
+			Value:    refreshToken,
+			Expires:  time.Now().Add(auth.RefreshTTL),
+			HttpOnly: true, // Prevents JavaScript access
+			Secure:   true, // Sent only over HTTPS
+			SameSite: http.SameSiteStrictMode,
+			Path:     "/refresh", // Only sent to the /refresh endpoint
+		})
+
+		// Return the short-lived access token in the response body
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"token":"%s"}`, token)
+		fmt.Fprintf(w, `{"accessToken":"%s"}`, accessToken)
 	}
 }

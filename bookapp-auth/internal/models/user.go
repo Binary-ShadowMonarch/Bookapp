@@ -1,8 +1,10 @@
+// internal/models/user.go
 package models
 
-// User holds credential + session data.
-// Email is the unique key.
 type User struct {
+	ID             int
 	Email          string
 	HashedPassword string
+	Provider       string // 'local', 'google', 'github'
+	ProviderID     string // e.g. OAuth subject or userID
 }

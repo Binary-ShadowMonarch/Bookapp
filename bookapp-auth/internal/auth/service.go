@@ -2,12 +2,19 @@
 package auth
 
 import (
-	"errors"
+	"bookapp/internal/models" // or "bookapp/internal/models" per your module
+	"context"
+	"errors" // for ErrInvalidCredentials,ErrUnauthorized, errors.New
+	"fmt"
+	"log"
 	"net/http"
-	"strings"
+	"os"
+	"strconv"
+	"strings" // for strings.SplitN
+	"time"
 
-	"bookapp/internal/models"
-	// for CreateToken, ParseToken
+	"github.com/minio/minio-go/v7" // for minio.Client & IsBucketAlreadyOwnedByYou
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 // ErrInvalidCredentials is returned when login fails.
@@ -20,17 +27,42 @@ var ErrUnauthorized = errors.New("unauthorized")
 type UserStore interface {
 	Create(*models.User) error
 	FindByEmail(string) (*models.User, error)
+	FindByID(int) (*models.User, error) // Add this
 	Update(*models.User) error
+
+	// Add these for refresh tokens
+	SaveRefreshToken(token string, userID int, expiresAt time.Time) error
+	DeleteRefreshToken(token string) error
+	FindRefreshToken(token string) (int, error)
 }
 
 // Service wraps auth logic.
 type Service struct {
-	store UserStore
+	store      UserStore
+	minio      *minio.Client
+	bucketPref string
 }
 
 // NewService constructs the auth Service.
 func NewService(us UserStore) *Service {
-	return &Service{store: us}
+	// 1) Construct MinIO client
+	endpoint := os.Getenv("MINIO_ENDPOINT") // e.g. "play.min.io:9000"
+	accessKey := os.Getenv("MINIO_KEY")
+	secretKey := os.Getenv("MINIO_SECRET")
+
+	mc, err := minio.New(endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
+		Secure: false,
+	})
+	if err != nil {
+		log.Fatalf("unable to initialize MinIO client: %v", err)
+	}
+
+	return &Service{
+		store:      us,
+		minio:      mc,
+		bucketPref: "user-", // prefix for buckets
+	}
 }
 
 // Register a new user.
@@ -42,23 +74,100 @@ func (s *Service) Register(mail, password string) error {
 	if err != nil {
 		return err
 	}
-	return s.store.Create(&models.User{
+	if err := s.store.Create(&models.User{
 		Email:          mail,
 		HashedPassword: hashed,
-	})
+		Provider:       "local",
+	}); err != nil {
+		return err
+	}
+
+	// --- NEW: fetch the user to get its ID ---
+
+	u, err := s.store.FindByEmail(mail)
+	if err != nil {
+		return err
+	}
+
+	bucketName := s.bucketPref + strconv.Itoa(u.ID)
+	ctx := context.Background()
+
+	// Check existence
+	exists, err := s.minio.BucketExists(ctx, bucketName)
+	if err != nil {
+		return fmt.Errorf("error checking bucket %q exists: %w", bucketName, err)
+	}
+	// Create if missing
+	if !exists {
+		if err := s.minio.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{}); err != nil {
+			return fmt.Errorf("could not create bucket %q: %w", bucketName, err)
+		}
+	}
+	print("sucessfully registered")
+	return nil
+
 }
 
 // Login verifies credentials, returns a signed JWT.
-func (s *Service) Login(mail, password string) (string, error) {
+func (s *Service) Login(mail, password string) (accessToken, refreshToken string, err error) {
 	u, err := s.store.FindByEmail(mail)
+	if err != nil || !CheckPassword(u.HashedPassword, password) {
+		return "", "", ErrInvalidCredentials
+	}
+
+	accessToken, err = CreateToken(u.Email, AccessTTL)
 	if err != nil {
-		return "", ErrInvalidCredentials
+		return "", "", err
 	}
-	if !CheckPassword(u.HashedPassword, password) {
-		return "", ErrInvalidCredentials
+	refreshToken, err = CreateToken(u.Email, RefreshTTL)
+	if err != nil {
+		return "", "", err
 	}
-	// CreateToken is from internal/auth/jwt.go
-	return CreateToken(mail)
+
+	// Persist the new refresh token in the database
+	expiresAt := time.Now().Add(RefreshTTL)
+	if err := s.store.SaveRefreshToken(refreshToken, u.ID, expiresAt); err != nil {
+		return "", "", err
+	}
+
+	return accessToken, refreshToken, nil
+}
+
+func (s *Service) Refresh(oldRefreshToken string) (newAccessToken, newRefreshToken string, err error) {
+	// a. Validate the old token in the DB
+	userID, err := s.store.FindRefreshToken(oldRefreshToken)
+	if err != nil {
+		return "", "", ErrUnauthorized
+	}
+
+	// b. Delete the old token (it has been used)
+	if err := s.store.DeleteRefreshToken(oldRefreshToken); err != nil {
+		return "", "", err
+	}
+
+	// c. Get user details to create new tokens
+	u, err := s.store.FindByID(userID)
+	if err != nil {
+		return "", "", err
+	}
+
+	// d. Issue a new pair of tokens
+	newAccessToken, err = CreateToken(u.Email, AccessTTL)
+	if err != nil {
+		return "", "", err
+	}
+	newRefreshToken, err = CreateToken(u.Email, RefreshTTL)
+	if err != nil {
+		return "", "", err
+	}
+
+	// e. Persist the new refresh token
+	expiresAt := time.Now().Add(RefreshTTL)
+	if err := s.store.SaveRefreshToken(newRefreshToken, u.ID, expiresAt); err != nil {
+		return "", "", err
+	}
+
+	return newAccessToken, newRefreshToken, nil
 }
 
 // Logout is now a no‑op: JWTs live client‑side until expiry.

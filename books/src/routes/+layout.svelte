@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	let { children } = $props();
+	
 </script>
 
 <!-- Background image with acrylic/blur effect -->

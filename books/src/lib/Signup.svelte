@@ -1,8 +1,56 @@
 <!-- Signup.svelte -->
 <script lang="ts">
-    import { Book } from 'lucide-svelte';
+  import { Book } from 'lucide-svelte';
+  import { enhance } from '$app/forms';
+  import { onMount } from 'svelte';
 
+  let mail = '';
+  let password = '';
+  let confirmPassword = '';
+  let terms = false;
 
+  let errors = {
+    mail: '',
+    password: '',
+    confirm: '',
+    terms: '',
+  };
+
+  function validate() {
+    let valid = true;
+    errors = { mail: '', password: '', confirm: '', terms: '' };
+
+    if (!mail || !/\S+@\S+\.\S+/.test(mail)) {
+      errors.mail = 'Valid email required';
+      valid = false;
+    }
+
+    if (!password) {
+      errors.password = 'Password is required';
+      valid = false;
+    } else if (!/(?=.*[a-zA-Z])(?=.*\d)(?=.*[^a-zA-Z0-9])/.test(password)) {
+      errors.password = 'Must contain a letter, number, and special character';
+      valid = false;
+    }
+
+    if (confirmPassword !== password) {
+      errors.confirm = 'Passwords do not match';
+      valid = false;
+    }
+
+    if (!terms) {
+      errors.terms = 'You must agree to the terms';
+      valid = false;
+    }
+
+    return valid;
+  }
+
+  function onSubmit(e: Event) {
+    if (!validate()) {
+      e.preventDefault();
+    }
+  }
 </script>
 
 <div class="container">
@@ -66,35 +114,31 @@
     </div>
 
     <div class="form-wrapper">
-      <form>
-        <div class="form-group">
-          <input type="text" placeholder="Name" aria-label="Name" />
-        </div>
-        <div class="form-group">
-          <input type="email" placeholder="Email" aria-label="Email" />
-        </div>
-        <div class="form-group">
-          <input type="password" placeholder="Password" aria-label="Password" />
-        </div>
-        <div class="form-group checkbox-group">
-          <input type="checkbox" id="terms" />
-          <label for="terms">
-            I agree to the <a href="/">Terms and Conditions</a>
-            <svg viewBox="0 0 20 20" width="16" height="16">
-              <path d="M6.293 9.293a1 1 0 0 1 1.414 0L10 10.586l2.293-2.293a1 1 0 1 1 
-                       1.414 1.414l-3 3a1 1 0 0 1-1.414 
-                       0l-3-3a1 1 0 0 1 0-1.414z" fill="currentColor"/>
-            </svg>
-          </label>
-        </div>
-        <div class="form-group">
-          <button type="button">Sign up</button>
-        </div>
-        <p class="signin‑link">
-          Already have an account? 
-          <a href="/sign-in">Sign in</a>
-        </p>
-      </form>
+<form method="POST" use:enhance on:submit|preventDefault={onSubmit}>
+  <div class="form-group">
+    <input name="mail" type="email" placeholder="Email" bind:value={mail} />
+    {#if errors.mail}<p class="error">{errors.mail}</p>{/if}
+  </div>
+  <div class="form-group">
+    <input name="password" type="password" placeholder="Password" bind:value={password} />
+    {#if errors.password}<p class="error">{errors.password}</p>{/if}
+  </div>
+  <div class="form-group">
+    <input name="confirm" type="password" placeholder="Confirm Password" bind:value={confirmPassword} />
+    {#if errors.confirm}<p class="error">{errors.confirm}</p>{/if}
+  </div>
+  <div class="form-group checkbox-group">
+    <input type="checkbox" id="terms" bind:checked={terms} />
+    <label for="terms">
+      I agree to the <a href="/">Terms and Conditions</a>
+    </label>
+    {#if errors.terms}<p class="error">{errors.terms}</p>{/if}
+  </div>
+  <div class="form-group">
+    <button type="submit">Sign up</button>
+  </div>
+</form>
+
     </div>
   </div>
 </div>
@@ -173,8 +217,6 @@
   .form-group {
     margin-bottom: 1rem;
   }
-
-  .form-group input[type="text"],
   .form-group input[type="email"],
   .form-group input[type="password"] {
     width: 100%;
@@ -215,7 +257,7 @@
     text-decoration: underline;
   }
 
-  .checkbox-group svg {
+   svg {
     margin-left: 0.25rem;
   }
 
@@ -237,14 +279,10 @@
     box-shadow: 0 4px 15px rgba(0,0,0,0.4);
   }
 
-  .signin‑link {
-    margin-top: 1rem;
-    font-size: 0.875rem;
-    text-align: center;
-  }
 
-  .signin‑link a {
-    color: #d0b3ff;
-    text-decoration: underline;
-  }
+  .error {
+  color: #ff6b6b;
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+}
 </style>
