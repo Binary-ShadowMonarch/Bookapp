@@ -112,3 +112,40 @@ func (p *PostgresStore) FindByID(id int) (*models.User, error) {
 	}
 	return u, nil
 }
+
+// SaveVerification stores a pending signup.
+func (p *PostgresStore) SaveVerification(email, hashedPw, code string, expires time.Time) error {
+	_, err := p.db.ExecContext(context.Background(), `
+    INSERT INTO email_verifications (email, hashed_password, code, expires_at)
+    VALUES ($1,$2,$3,$4)
+    ON CONFLICT (email) DO UPDATE
+      SET hashed_password = excluded.hashed_password,
+          code = excluded.code,
+          expires_at = excluded.expires_at,
+          created_at = now()
+  `, email, hashedPw, code, expires)
+	return err
+}
+
+// GetVerification fetches pending signup by email+code.
+func (p *PostgresStore) GetVerification(email, code string) (hashedPw string, err error) {
+	// log.Printf("DEBUG: GetVerification called with email='%s', code='%s'", email, code)
+
+	row := p.db.QueryRowContext(context.Background(), `
+    SELECT hashed_password FROM email_verifications
+    WHERE email=$1 AND code=$2 AND expires_at>now()
+  `, email, code)
+	if err := row.Scan(&hashedPw); err != nil {
+		return "", err
+	}
+	// log.Printf("DEBUG: GetVerification succeeded, returning hashed password")
+	return hashedPw, nil
+}
+
+// DeleteVerification deletes after successful verify.
+func (p *PostgresStore) DeleteVerification(email string) error {
+	_, err := p.db.ExecContext(context.Background(), `
+    DELETE FROM email_verifications WHERE email=$1
+  `, email)
+	return err
+}

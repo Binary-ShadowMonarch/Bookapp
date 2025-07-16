@@ -12,11 +12,12 @@ import (
 func NewRouter(svc *auth.Service) http.Handler {
 	mux := http.NewServeMux()
 
-	// Public routes
-	mux.Handle("/register", RegisterHandler(svc))
-	mux.Handle("/login", LoginHandler(svc))
-	mux.Handle("/refresh", RefreshHandler(svc)) // Add the new refresh route
-	mux.Handle("/logout", LogoutHandler(svc))
+	// Public routes (with CORS)
+	mux.Handle("/signup/request", middleware.CORS(RequestVerifyHandler(svc)))
+	mux.Handle("/signup/verify", middleware.CORS(VerifyHandler(svc)))
+	mux.Handle("/login", middleware.CORS(LoginHandler(svc)))
+	mux.Handle("/refresh", middleware.CORS(RefreshHandler(svc))) // Add the new refresh route
+	mux.Handle("/logout", middleware.CORS(LogoutHandler(svc)))
 
 	// Protected routes (wrapped with JWT middleware)
 	// The protected handler now represents any user-specific data endpoint, like /library.

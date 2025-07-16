@@ -3,15 +3,20 @@ package auth
 
 import (
 	"bookapp/internal/models" // or "bookapp/internal/models" per your module
+	// or "bookapp/internal/models" per your module
 	"context"
 	"errors" // for ErrInvalidCredentials,ErrUnauthorized, errors.New
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
 	"strings" // for strings.SplitN
 	"time"
+
+	"github.com/sendgrid/sendgrid-go"
+	"github.com/sendgrid/sendgrid-go/helpers/mail"
 
 	"github.com/minio/minio-go/v7" // for minio.Client & IsBucketAlreadyOwnedByYou
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -34,6 +39,10 @@ type UserStore interface {
 	SaveRefreshToken(token string, userID int, expiresAt time.Time) error
 	DeleteRefreshToken(token string) error
 	FindRefreshToken(token string) (int, error)
+	// email verification management
+	SaveVerification(email, hashedPw, code string, expiresAt time.Time) error
+	GetVerification(email, code string) (hashedPw string, err error)
+	DeleteVerification(email string) error
 }
 
 // Service wraps auth logic.
@@ -65,47 +74,76 @@ func NewService(us UserStore) *Service {
 	}
 }
 
-// Register a new user.
-func (s *Service) Register(mail, password string) error {
-	if mail == "" || len(password) < 8 {
-		return errors.New("invalid mail or password too short")
+func (s *Service) RequestVerification(email, password string) error {
+	if email == "" || len(password) < 8 {
+		return errors.New("invalid")
 	}
+
+	// Check if user exists by email
+	_, err := s.store.FindByEmail(email)
+	if err != nil {
+		// Check if it's a "user not found" error (you need to import your store package or use the specific error)
+		// Replace this with your actual ErrUserNotFound from your store package
+		if err.Error() == "user not found" || err.Error() == "sql: no rows in result set" {
+			// User NOT found - continue with verification process (this is for new registrations)
+		} else {
+			// Some other database error
+			return err
+		}
+	} else {
+		// User EXISTS - return error to prevent duplicate registrations
+		return errors.New("account associated with this email already exists")
+	}
+
 	hashed, err := HashPassword(password)
 	if err != nil {
 		return err
 	}
+
+	// generate 6‑digit code
+	code := fmt.Sprintf("%06d", rand.Intn(1_000_000))
+	expires := time.Now().Add(15 * time.Minute)
+
+	// persist
+	if err := s.store.SaveVerification(email, hashed, code, expires); err != nil {
+		return err
+	}
+
+	// send email
+	return s.sendVerificationEmail(email, code)
+}
+
+func (s *Service) VerifyCode(email, code string) error {
+
+	// log.Printf("DEBUG: VerifyCode called with email='%s', code='%s'", email, code)
+
+	hashed, err := s.store.GetVerification(email, code)
+	if err != nil {
+		return ErrUnauthorized
+	}
+
+	// log.Printf("DEBUG: GetVerification succeeded, hashed password length: %d", len(hashed))
+
+	// create real user
 	if err := s.store.Create(&models.User{
-		Email:          mail,
-		HashedPassword: hashed,
-		Provider:       "local",
+		Email: email, HashedPassword: hashed, Provider: "local",
 	}); err != nil {
+		log.Printf("DEBUG: User creation failed: %v", err)
 		return err
 	}
-
-	// --- NEW: fetch the user to get its ID ---
-
-	u, err := s.store.FindByEmail(mail)
-	if err != nil {
-		return err
-	}
-
-	bucketName := s.bucketPref + strconv.Itoa(u.ID)
+	// log.Printf("DEBUG: User created successfully")
+	// cleanup
+	_ = s.store.DeleteVerification(email)
+	// bucket
+	u, _ := s.store.FindByEmail(email)
+	bucket := s.bucketPref + strconv.Itoa(u.ID)
 	ctx := context.Background()
-
-	// Check existence
-	exists, err := s.minio.BucketExists(ctx, bucketName)
-	if err != nil {
-		return fmt.Errorf("error checking bucket %q exists: %w", bucketName, err)
-	}
-	// Create if missing
-	if !exists {
-		if err := s.minio.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{}); err != nil {
-			return fmt.Errorf("could not create bucket %q: %w", bucketName, err)
+	if ok, _ := s.minio.BucketExists(ctx, bucket); !ok {
+		if err := s.minio.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
+			return err
 		}
 	}
-	print("sucessfully registered")
 	return nil
-
 }
 
 // Login verifies credentials, returns a signed JWT.
@@ -187,4 +225,17 @@ func (s *Service) Authorize(r *http.Request) (string, error) {
 		return "", ErrUnauthorized
 	}
 	return claims.Email, nil
+}
+
+func (s *Service) sendVerificationEmail(to, code string) error {
+	sg := sendgrid.NewSendClient(os.Getenv("SENDGRID_API_KEY"))
+	from := mail.NewEmail("Books App", os.Getenv("SENDGRID_EMAIL"))
+	subject := "Your verification code"
+	toEmail := mail.NewEmail("", to)
+	plainText := fmt.Sprintf("Your code is %s", code)
+	htmlContent := fmt.Sprintf(`<p>Your verification code is <b>%s</b></p>`, code)
+	message := mail.NewSingleEmail(from, subject, toEmail, plainText, htmlContent)
+	_, err := sg.Send(message)
+	// println(os.Getenv("SENDGRID_API_KEY"))
+	return err
 }
