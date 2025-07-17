@@ -1,9 +1,13 @@
+<!-- src/routes/library/+page.svelte -->
 <script lang="ts">
 	import BookCard from '../../lib/BookCard.svelte';
 	import NavBar from '../../lib/NavBar.svelte';
 	import SearchBar from '../../lib/SearchBar.svelte';
 	import EpubUpload from '../../lib/EpubUpload.svelte';
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { LogOut, Settings, HelpCircle, User2 } from 'lucide-svelte';
+	export let data: { user: { email: string } };
 
 	type BookStatus = 'read' | 'unread' | 'finished';
 	const modes = ['all', 'read', 'unread', 'finished'] as const;
@@ -181,12 +185,11 @@
 		// 	completion: 80
 		// }
 	];
-
+	data;
 	let searchTerm = '';
 	let statusFilter: Mode = 'all';
 
 	// Load books from localStorage on mount
-
 
 	function handleBookAdded(book: Book) {
 		books = [...books, book];
@@ -201,6 +204,21 @@
 
 		return matchesSearch && matchesStatus;
 	});
+
+	let showMenu = false;
+
+	function toggleMenu() {
+		showMenu = !showMenu;
+	}
+
+	async function logout() {
+		// clear cookies by making logout request
+		await fetch('http://localhost:8080/logout', {
+			method: 'POST',
+			credentials: 'include'
+		});
+		await goto('/login');
+	}
 </script>
 
 <!-- Nav bar -->
@@ -238,6 +256,39 @@
 
 		<!-- Replace the upload button with the EpubUpload component -->
 		<EpubUpload onBookAdded={handleBookAdded} />
+		<div class="relative">
+			<button
+				on:click={toggleMenu}
+				class="rounded-full p-2 transition hover:bg-gray-200 dark:hover:bg-gray-700"
+				aria-label="User menu"
+			>
+				<User2 class="h-6 w-6 text-gray-800 dark:text-white" />
+			</button>
+
+			{#if showMenu}
+				<div
+					class="absolute right-0 z-50 mt-2 w-48 rounded-lg bg-white text-sm shadow-lg dark:bg-gray-800"
+				>
+					<button
+						class="flex w-full items-center gap-2 px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+					>
+						<Settings class="h-4 w-4" /> Settings
+					</button>
+					<button
+						class="flex w-full items-center gap-2 px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+					>
+						<HelpCircle class="h-4 w-4" /> Help & Support
+					</button>
+					<hr class="border-gray-300 dark:border-gray-600" />
+					<button
+						on:click={logout}
+						class="flex w-full items-center gap-2 px-4 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900"
+					>
+						<LogOut class="h-4 w-4" /> Logout
+					</button>
+				</div>
+			{/if}
+		</div>
 	</div>
 
 	<!-- secondary row buttons -->

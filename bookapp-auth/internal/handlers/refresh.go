@@ -3,7 +3,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"time"
 
@@ -22,17 +21,19 @@ func RefreshHandler(svc *auth.Service) http.HandlerFunc {
 		// 2. Call the service to rotate the tokens
 		newAccessToken, newRefreshToken, err := svc.Refresh(oldTokenCookie.Value)
 		if err != nil {
-			// If refresh fails, clear the cookie to force re-login
-			http.SetCookie(w, &http.Cookie{
-				Name:   "refresh_token",
-				Value:  "",
-				MaxAge: -1,
-			})
-			http.Error(w, "unauthorized: invalid refresh token", http.StatusUnauthorized)
+			http.Error(w, "unauthorized: no refresh token", http.StatusUnauthorized)
 			return
 		}
 
-		// 3. Set the new rotated refresh token as a cookie
+		http.SetCookie(w, &http.Cookie{
+			Name:     "access_token",
+			Value:    newAccessToken,
+			Expires:  time.Now().Add(auth.AccessTTL),
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+			Path:     "/", // valid on all API routes
+		})
 		http.SetCookie(w, &http.Cookie{
 			Name:     "refresh_token",
 			Value:    newRefreshToken,
@@ -40,11 +41,9 @@ func RefreshHandler(svc *auth.Service) http.HandlerFunc {
 			HttpOnly: true,
 			Secure:   true,
 			SameSite: http.SameSiteStrictMode,
-			Path:     "/refresh",
+			Path:     "/refresh", // only sent to your /refresh handler
 		})
-
-		// 4. Return the new access token in the response body
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"accessToken":"%s"}`, newAccessToken)
+		// return 204 No Content
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

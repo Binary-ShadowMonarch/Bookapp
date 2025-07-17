@@ -21,7 +21,7 @@ func NewRouter(svc *auth.Service) http.Handler {
 
 	// Protected routes (wrapped with JWT middleware)
 	// The protected handler now represents any user-specific data endpoint, like /library.
-	mux.Handle("/protected", middleware.JWTMiddleware(svc, ProtectedHandler(svc)))
+	mux.Handle("/library", middleware.JWTMiddleware(svc, ProtectedHandler(svc)))
 
 	return mux
 }

@@ -136,7 +136,8 @@ func (s *Service) VerifyCode(email, code string) error {
 	_ = s.store.DeleteVerification(email)
 	// bucket
 	u, _ := s.store.FindByEmail(email)
-	bucket := s.bucketPref + strconv.Itoa(u.ID)
+	safeEmail := strings.NewReplacer("@", "-", ".", "-").Replace(email)
+	bucket := s.bucketPref + strconv.Itoa(u.ID) + "-" + safeEmail
 	ctx := context.Background()
 	if ok, _ := s.minio.BucketExists(ctx, bucket); !ok {
 		if err := s.minio.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
@@ -172,6 +173,12 @@ func (s *Service) Login(mail, password string) (accessToken, refreshToken string
 }
 
 func (s *Service) Refresh(oldRefreshToken string) (newAccessToken, newRefreshToken string, err error) {
+
+	// 1) Verify the JWT signature and expiration first
+	if _, err := ParseToken(oldRefreshToken); err != nil {
+		return "", "", ErrUnauthorized
+	}
+
 	// a. Validate the old token in the DB
 	userID, err := s.store.FindRefreshToken(oldRefreshToken)
 	if err != nil {
@@ -213,17 +220,30 @@ func (s *Service) Logout(mail string) error {
 	return nil
 }
 
-// Authorize parses and verifies the Bearer token.
+// Authorize parses and verifies the Bearer token or access_token cookie.
 func (s *Service) Authorize(r *http.Request) (string, error) {
-	authHeader := r.Header.Get("Authorization") // “Bearer <token>”
+	var token string
+
+	// 1. Try Authorization header first
+	authHeader := r.Header.Get("Authorization")
 	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || parts[0] != "Bearer" {
-		return "", ErrUnauthorized
+	if len(parts) == 2 && parts[0] == "Bearer" {
+		token = parts[1]
+	} else {
+		// 2. Fallback to access_token cookie
+		cookie, err := r.Cookie("access_token")
+		if err != nil {
+			return "", ErrUnauthorized
+		}
+		token = cookie.Value
 	}
-	claims, err := ParseToken(parts[1])
+
+	// 3. Parse and validate token
+	claims, err := ParseToken(token)
 	if err != nil {
 		return "", ErrUnauthorized
 	}
+
 	return claims.Email, nil
 }
 

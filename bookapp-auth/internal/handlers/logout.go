@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 
 	"bookapp/internal/auth"
@@ -9,15 +8,30 @@ import (
 
 func LogoutHandler(svc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Optional: ensure token is valid so clients can’t “logout” random users
+		// Optional: validate token if you want extra safety
 		if _, err := svc.Authorize(r); err != nil {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		// Nothing to clear server‑side; just respond success.
-		// Front‑end should drop its copy of the JWT (e.g. clear the store).
+		// Invalidate cookies on the client by setting them with past expiry
+		clearCookie := func(name string, path string) {
+			http.SetCookie(w, &http.Cookie{
+				Name:     name,
+				Value:    "",
+				Path:     path,
+				MaxAge:   -1,
+				HttpOnly: true,
+				Secure:   true,
+				SameSite: http.SameSiteStrictMode,
+			})
+		}
+
+		clearCookie("access_token", "/")
+		clearCookie("refresh_token", "/refresh")
+
+		// Also remove server-side refresh token (optional, already done)
+		// Return 204 No Content
 		w.WriteHeader(http.StatusNoContent)
-		fmt.Fprintln(w, "logged out")
 	}
 }

@@ -4,7 +4,6 @@ package handlers
 
 import (
 	"bookapp/internal/auth"
-	"fmt"
 	"net/http"
 	"time"
 )
@@ -20,23 +19,29 @@ func LoginHandler(svc *auth.Service) http.HandlerFunc {
 
 		accessToken, refreshToken, err := svc.Login(mail, pw)
 		if err != nil {
-			http.Error(w, "invalid credentials", http.StatusUnauthorized)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-
-		// Set the long-lived refresh token as a secure, HttpOnly cookie
+		// after creating tokens…
+		http.SetCookie(w, &http.Cookie{
+			Name:     "access_token",
+			Value:    accessToken,
+			Expires:  time.Now().Add(auth.AccessTTL),
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+			Path:     "/", // valid on all API routes
+		})
 		http.SetCookie(w, &http.Cookie{
 			Name:     "refresh_token",
 			Value:    refreshToken,
 			Expires:  time.Now().Add(auth.RefreshTTL),
-			HttpOnly: true, // Prevents JavaScript access
-			Secure:   true, // Sent only over HTTPS
+			HttpOnly: true,
+			Secure:   true,
 			SameSite: http.SameSiteStrictMode,
-			Path:     "/refresh", // Only sent to the /refresh endpoint
+			Path:     "/refresh", // only sent to your /refresh handler
 		})
-
-		// Return the short-lived access token in the response body
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"accessToken":"%s"}`, accessToken)
+		// return 204 No Content
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
