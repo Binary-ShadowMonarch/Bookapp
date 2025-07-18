@@ -28,7 +28,7 @@ func LoginHandler(svc *auth.Service) http.HandlerFunc {
 			Value:    accessToken,
 			Expires:  time.Now().Add(auth.AccessTTL),
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   false,
 			SameSite: http.SameSiteStrictMode,
 			Path:     "/", // valid on all API routes
 		})
@@ -37,7 +37,7 @@ func LoginHandler(svc *auth.Service) http.HandlerFunc {
 			Value:    refreshToken,
 			Expires:  time.Now().Add(auth.RefreshTTL),
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   false,
 			SameSite: http.SameSiteStrictMode,
 			Path:     "/refresh", // only sent to your /refresh handler
 		})

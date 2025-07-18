@@ -18,6 +18,10 @@ import (
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 
+	"io"
+	"mime/multipart"
+	"path/filepath"
+
 	"github.com/minio/minio-go/v7" // for minio.Client & IsBucketAlreadyOwnedByYou
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -114,36 +118,49 @@ func (s *Service) RequestVerification(email, password string) error {
 }
 
 func (s *Service) VerifyCode(email, code string) error {
-
-	// log.Printf("DEBUG: VerifyCode called with email='%s', code='%s'", email, code)
-
 	hashed, err := s.store.GetVerification(email, code)
 	if err != nil {
 		return ErrUnauthorized
 	}
 
-	// log.Printf("DEBUG: GetVerification succeeded, hashed password length: %d", len(hashed))
-
-	// create real user
 	if err := s.store.Create(&models.User{
 		Email: email, HashedPassword: hashed, Provider: "local",
 	}); err != nil {
 		log.Printf("DEBUG: User creation failed: %v", err)
 		return err
 	}
-	// log.Printf("DEBUG: User created successfully")
-	// cleanup
+
 	_ = s.store.DeleteVerification(email)
-	// bucket
+
 	u, _ := s.store.FindByEmail(email)
-	safeEmail := strings.NewReplacer("@", "-", ".", "-").Replace(email)
-	bucket := s.bucketPref + strconv.Itoa(u.ID) + "-" + safeEmail
+	bucket := s.bucketPref + strconv.Itoa(u.ID)
+
 	ctx := context.Background()
+
 	if ok, _ := s.minio.BucketExists(ctx, bucket); !ok {
 		if err := s.minio.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
 			return err
 		}
+
+		// 🔧 Set public read policy after creating the bucket
+		policy := fmt.Sprintf(`{
+			"Version": "2012-10-17",
+			"Statement": [
+				{
+					"Action": ["s3:GetObject"],
+					"Effect": "Allow",
+					"Principal": "*",
+					"Resource": ["arn:aws:s3:::%s/*"]
+				}
+			]
+		}`, bucket)
+
+		if err := s.minio.SetBucketPolicy(ctx, bucket, policy); err != nil {
+			log.Printf("ERROR: Failed to set bucket policy: %v", err)
+			return err
+		}
 	}
+
 	return nil
 }
 
@@ -258,4 +275,89 @@ func (s *Service) sendVerificationEmail(to, code string) error {
 	_, err := sg.Send(message)
 	// println(os.Getenv("SENDGRID_API_KEY"))
 	return err
+}
+
+// UploadFile uploads the given multipart file to the MinIO bucket for the given user ID.
+// It returns the public URL (or any URL scheme you choose) of the uploaded object.
+func (s *Service) UploadFile(ctx context.Context, userID int, file multipart.File, header *multipart.FileHeader) (string, error) {
+	// Ensure bucket name matches your prefix + user ID
+	bucket := s.bucketPref + strconv.Itoa(userID)
+
+	// Create the bucket if it doesn't exist
+	exists, err := s.minio.BucketExists(ctx, bucket)
+	if err != nil {
+		return "", fmt.Errorf("checking bucket existence: %w", err)
+	}
+	if !exists {
+		if err := s.minio.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
+			return "", fmt.Errorf("making bucket: %w", err)
+		}
+	}
+
+	// Construct an object name: you might want to
+	// prefix with a timestamp or user ID for uniqueness
+	objectName := fmt.Sprintf("%d_%d%s",
+		userID,
+		time.Now().UnixNano(),
+		filepath.Ext(header.Filename),
+	)
+
+	// Upload the file
+	info, err := s.minio.PutObject(
+		ctx,
+		bucket,
+		objectName,
+		io.LimitReader(file, header.Size), // ensure PutObject knows size
+		header.Size,
+		minio.PutObjectOptions{
+			ContentType: header.Header.Get("Content-Type"),
+			// You can set ACL-like via metadata or bucket policy
+		},
+	)
+	if err != nil {
+		return "", fmt.Errorf("uploading to minio: %w", err)
+	}
+
+	// Construct a URL – adjust to your MinIO endpoint / gateway
+	url := fmt.Sprintf("http://%s/%s/%s", s.minio.EndpointURL().Host, bucket, info.Key)
+	return url, nil
+}
+
+// GetUserByEmail is a thin wrapper around the underlying UserStore.
+func (s *Service) GetUserByEmail(email string) (*models.User, error) {
+	return s.store.FindByEmail(email)
+}
+
+// ListFiles returns a slice of public URLs for every object
+// in the given user's bucket.
+func (s *Service) ListFiles(ctx context.Context, userID int) ([]string, error) {
+	bucket := s.bucketPref + strconv.Itoa(userID)
+
+	// make sure bucket exists
+	exists, err := s.minio.BucketExists(ctx, bucket)
+	if err != nil {
+		return nil, fmt.Errorf("checking bucket existence: %w", err)
+	}
+	if !exists {
+		return nil, nil // no bucket → no files
+	}
+	println("reached")
+	// List all objects
+	objectCh := s.minio.ListObjects(ctx, bucket, minio.ListObjectsOptions{
+		Recursive: true,
+	})
+
+	var urls []string
+	for obj := range objectCh {
+		if obj.Err != nil {
+			return nil, fmt.Errorf("listing objects: %w", obj.Err)
+		}
+		// build your public URL pattern
+		urls = append(urls, fmt.Sprintf("http://%s/%s/%s",
+			s.minio.EndpointURL().Host,
+			bucket,
+			obj.Key,
+		))
+	}
+	return urls, nil
 }
