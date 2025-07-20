@@ -1,5 +1,4 @@
 // internal/handlers/login.go
-
 package handlers
 
 import (
@@ -8,40 +7,60 @@ import (
 	"time"
 )
 
+// type LoginResponse struct {
+// 	AccessToken  string `json:"access_token"`
+// 	RefreshToken string `json:"refresh_token"`
+// 	ExpiresIn    int64  `json:"expires_in"`
+// 	TokenType    string `json:"token_type"`
+// }
+
 func LoginHandler(svc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+
 		mail := r.FormValue("mail")
 		pw := r.FormValue("password")
 
 		accessToken, refreshToken, err := svc.Login(mail, pw)
 		if err != nil {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
-		// after creating tokens…
+
+		// Set secure HTTP-only cookies
 		http.SetCookie(w, &http.Cookie{
 			Name:     "access_token",
 			Value:    accessToken,
-			Expires:  time.Now().Add(auth.AccessTTL),
+			Expires:  time.Now().UTC().Add(auth.AccessTTL),
 			HttpOnly: true,
-			Secure:   false,
+			Secure:   true, // Set to true in production with HTTPS
 			SameSite: http.SameSiteStrictMode,
-			Path:     "/", // valid on all API routes
+			Path:     "/",
 		})
+
 		http.SetCookie(w, &http.Cookie{
 			Name:     "refresh_token",
 			Value:    refreshToken,
-			Expires:  time.Now().Add(auth.RefreshTTL),
+			Expires:  time.Now().UTC().Add(auth.RefreshTTL),
 			HttpOnly: true,
-			Secure:   false,
+			Secure:   true, // Set to true in production with HTTPS
 			SameSite: http.SameSiteStrictMode,
-			Path:     "/refresh", // only sent to your /refresh handler
+			Path:     "/",
 		})
-		// return 204 No Content
+
+		// Also return tokens in JSON for SvelteKit frontend flexibility
+		// response := LoginResponse{
+		// 	AccessToken:  accessToken,
+		// 	RefreshToken: refreshToken,
+		// 	ExpiresIn:    int64(auth.AccessTTL.Seconds()),
+		// 	TokenType:    "Bearer",
+		// }
+
+		// w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNoContent)
+		// json.NewEncoder(w).Encode(response)
 	}
 }

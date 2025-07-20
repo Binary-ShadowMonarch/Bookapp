@@ -47,6 +47,7 @@ type UserStore interface {
 	SaveVerification(email, hashedPw, code string, expiresAt time.Time) error
 	GetVerification(email, code string) (hashedPw string, err error)
 	DeleteVerification(email string) error
+	DeleteAllRefreshTokensForUser(userID int) error // ADD THIS LINE
 }
 
 // Service wraps auth logic.
@@ -106,7 +107,7 @@ func (s *Service) RequestVerification(email, password string) error {
 
 	// generate 6‑digit code
 	code := fmt.Sprintf("%06d", rand.Intn(1_000_000))
-	expires := time.Now().Add(15 * time.Minute)
+	expires := time.Now().UTC().Add(15 * time.Minute)
 
 	// persist
 	if err := s.store.SaveVerification(email, hashed, code, expires); err != nil {
@@ -166,6 +167,7 @@ func (s *Service) VerifyCode(email, code string) error {
 
 // Login verifies credentials, returns a signed JWT.
 func (s *Service) Login(mail, password string) (accessToken, refreshToken string, err error) {
+	log.Printf("DEBUG: LOGIN INIT ")
 	u, err := s.store.FindByEmail(mail)
 	if err != nil || !CheckPassword(u.HashedPassword, password) {
 		return "", "", ErrInvalidCredentials
@@ -175,13 +177,15 @@ func (s *Service) Login(mail, password string) (accessToken, refreshToken string
 	if err != nil {
 		return "", "", err
 	}
+	log.Printf("accessToken created: %s", accessToken)
 	refreshToken, err = CreateToken(u.Email, RefreshTTL)
 	if err != nil {
 		return "", "", err
 	}
 
 	// Persist the new refresh token in the database
-	expiresAt := time.Now().Add(RefreshTTL)
+	expiresAt := time.Now().UTC().Add(RefreshTTL)
+	log.Printf("refreshToken created: %s", refreshToken)
 	if err := s.store.SaveRefreshToken(refreshToken, u.ID, expiresAt); err != nil {
 		return "", "", err
 	}
@@ -191,43 +195,65 @@ func (s *Service) Login(mail, password string) (accessToken, refreshToken string
 
 func (s *Service) Refresh(oldRefreshToken string) (newAccessToken, newRefreshToken string, err error) {
 
+	log.Printf("DEBUG: Refresh executed")
+	log.Printf("DEBUG: old Refresh token : %s", oldRefreshToken)
+
 	// 1) Verify the JWT signature and expiration first
 	if _, err := ParseToken(oldRefreshToken); err != nil {
+		log.Printf("DEBUG: failed to parse token : %s", err)
 		return "", "", ErrUnauthorized
 	}
+
+	log.Printf("DEBUG: token parsed")
 
 	// a. Validate the old token in the DB
 	userID, err := s.store.FindRefreshToken(oldRefreshToken)
 	if err != nil {
+		log.Printf("DEBUG: cant find the token : %s", err)
 		return "", "", ErrUnauthorized
 	}
-
-	// b. Delete the old token (it has been used)
-	if err := s.store.DeleteRefreshToken(oldRefreshToken); err != nil {
-		return "", "", err
-	}
+	log.Printf("DEBUG: token validated")
 
 	// c. Get user details to create new tokens
 	u, err := s.store.FindByID(userID)
 	if err != nil {
+		log.Printf("DEBUG: critical cant find user( is the user logged in): %s", err)
 		return "", "", err
 	}
 
 	// d. Issue a new pair of tokens
 	newAccessToken, err = CreateToken(u.Email, AccessTTL)
 	if err != nil {
+		log.Printf("DEBUG: can't create the access token  : %s", err)
 		return "", "", err
 	}
+	log.Printf("DEBUG: created access token")
+
 	newRefreshToken, err = CreateToken(u.Email, RefreshTTL)
 	if err != nil {
+		log.Printf("DEBUG: can't create the refresh token  : %s", err)
+
+		return "", "", err
+	}
+	log.Printf("DEBUG: created refresh token")
+
+	// e. Persist the new refresh token
+	expiresAt := time.Now().UTC().Add(RefreshTTL)
+	if err := s.store.SaveRefreshToken(newRefreshToken, u.ID, expiresAt); err != nil {
+		log.Printf("DEBUG: SaveRefreshToken failed  : %s", err)
+
+		return "", "", err
+	}
+	log.Printf("DEBUG: tokens saved ")
+
+	// b. Delete the old token (it has been used)
+	if err := s.store.DeleteRefreshToken(oldRefreshToken); err != nil {
+		log.Printf("DEBUG: cant delete refresh token : %s", err)
 		return "", "", err
 	}
 
-	// e. Persist the new refresh token
-	expiresAt := time.Now().Add(RefreshTTL)
-	if err := s.store.SaveRefreshToken(newRefreshToken, u.ID, expiresAt); err != nil {
-		return "", "", err
-	}
+	log.Printf("DEBUG:refresh token deleted  : %s", err)
+	log.Printf("DEBUG: new accesstoken: %s \n new refreshtoken: %s", newAccessToken, newRefreshToken)
 
 	return newAccessToken, newRefreshToken, nil
 }
@@ -258,6 +284,7 @@ func (s *Service) Authorize(r *http.Request) (string, error) {
 	// 3. Parse and validate token
 	claims, err := ParseToken(token)
 	if err != nil {
+		log.Printf("DEBUG : parse error :%s", err)
 		return "", ErrUnauthorized
 	}
 
@@ -298,7 +325,7 @@ func (s *Service) UploadFile(ctx context.Context, userID int, file multipart.Fil
 	// prefix with a timestamp or user ID for uniqueness
 	objectName := fmt.Sprintf("%d_%d%s",
 		userID,
-		time.Now().UnixNano(),
+		time.Now().UTC().UnixNano(),
 		filepath.Ext(header.Filename),
 	)
 
@@ -341,7 +368,6 @@ func (s *Service) ListFiles(ctx context.Context, userID int) ([]string, error) {
 	if !exists {
 		return nil, nil // no bucket → no files
 	}
-	println("reached")
 	// List all objects
 	objectCh := s.minio.ListObjects(ctx, bucket, minio.ListObjectsOptions{
 		Recursive: true,
@@ -360,4 +386,62 @@ func (s *Service) ListFiles(ctx context.Context, userID int) ([]string, error) {
 		))
 	}
 	return urls, nil
+}
+
+// Add these methods to internal/auth/service.go
+
+// DeleteFile removes a file from the user's bucket
+func (s *Service) DeleteFile(ctx context.Context, userID int, fileName string) error {
+	bucket := s.bucketPref + strconv.Itoa(userID)
+
+	return s.minio.RemoveObject(ctx, bucket, fileName, minio.RemoveObjectOptions{})
+}
+
+// GetFileInfo returns detailed information about a specific file
+func (s *Service) GetFileInfo(ctx context.Context, userID int, fileName string) (*FileInfo, error) {
+	bucket := s.bucketPref + strconv.Itoa(userID)
+
+	objInfo, err := s.minio.StatObject(ctx, bucket, fileName, minio.StatObjectOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	url := fmt.Sprintf("http://%s/%s/%s", s.minio.EndpointURL().Host, bucket, fileName)
+
+	return &FileInfo{
+		ID:       fileName,
+		Name:     fileName,
+		URL:      url,
+		Size:     objInfo.Size,
+		MimeType: objInfo.ContentType,
+	}, nil
+}
+
+// FileInfo struct for file details
+type FileInfo struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	URL      string `json:"url"`
+	Size     int64  `json:"size,omitempty"`
+	MimeType string `json:"mimeType,omitempty"`
+}
+
+// Enhanced Logout to revoke refresh tokens
+func (s *Service) LogoutWithTokenRevocation(refreshToken string) error {
+	if refreshToken != "" {
+		// Revoke the specific refresh token
+		return s.store.DeleteRefreshToken(refreshToken)
+	}
+	return nil
+}
+
+// LogoutAllSessions revokes all refresh tokens for a user
+func (s *Service) LogoutAllSessions(email string) error {
+	user, err := s.store.FindByEmail(email)
+	if err != nil {
+		return err
+	}
+
+	// TODO: Add method to store to delete all tokens for user
+	return s.store.DeleteAllRefreshTokensForUser(user.ID)
 }

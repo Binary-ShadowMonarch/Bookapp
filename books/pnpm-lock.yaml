@@ -23,6 +23,9 @@ importers:
       nanoid:
         specifier: ^5.1.5
         version: 5.1.5
+      svelte-reader:
+        specifier: ^1.1.1
+        version: 1.1.1
     devDependencies:
       '@eslint/compat':
         specifier: ^1.2.5
@@ -1911,6 +1914,9 @@ packages:
     peerDependenciesMeta:
       svelte:
         optional: true
+
+  svelte-reader@1.1.1:
+    resolution: {integrity: sha512-sUWWRXf8Ri7pYfo0y5Z7GjxNzKP0FcKHohiwoWNjWtHhue/+7HuIE4iBIHDhHLusWTp8magx2q8XvFDIvHzi2A==}
 
   svelte@5.35.3:
     resolution: {integrity: sha512-/eW3yMa+7FECZBlrt5px5pbw7nRY7QcZqUvx4zcodB25tVEBYSoWbTjH8CbAvw8jdU9VoxUzcy5x0UPp/bNJDw==}
@@ -3810,6 +3816,10 @@ snapshots:
       postcss-selector-parser: 7.1.0
     optionalDependencies:
       svelte: 5.35.3
+
+  svelte-reader@1.1.1:
+    dependencies:
+      epubjs: 0.3.93
 
   svelte@5.35.3:
     dependencies:

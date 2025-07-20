@@ -150,12 +150,17 @@ func (p *PostgresStore) DeleteVerification(email string) error {
 	return err
 }
 
-// func StartCleanupTasks(db *sql.DB) {
-// 	go func() {
-// 		for {
-// 			_, _ = db.Exec(`DELETE FROM refresh_tokens WHERE expires_at < now()`)
-// 			_, _ = db.Exec(`DELETE FROM email_verification WHERE created_at < now() - interval '1 day'`)
-// 			time.Sleep(24 * time.Hour)
-// 		}
-// 	}()
-// }
+//	func StartCleanupTasks(db *sql.DB) {
+//		go func() {
+//			for {
+//				_, _ = db.Exec(`DELETE FROM refresh_tokens WHERE expires_at < now()`)
+//				_, _ = db.Exec(`DELETE FROM email_verification WHERE created_at < now() - interval '1 day'`)
+//				time.Sleep(24 * time.Hour)
+//			}
+//		}()
+//	}
+func (p *PostgresStore) DeleteAllRefreshTokensForUser(userID int) error {
+	_, err := p.db.ExecContext(context.Background(),
+		`DELETE FROM refresh_tokens WHERE user_id = $1`, userID)
+	return err
+}

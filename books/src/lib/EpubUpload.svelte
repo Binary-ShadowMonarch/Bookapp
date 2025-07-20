@@ -11,6 +11,17 @@
 		completion: number;
 		fileUrl: string;
 	}
+	interface FileInfo {
+		id: string;
+		name: string;
+		url: string;
+		size?: number;
+		mimeType?: string;
+	}
+	interface LibraryResponse {
+		files: FileInfo[];
+		total: number;
+	}
 
 	interface Props {
 		onBookAdded: (book: Book) => void;
@@ -61,15 +72,24 @@
 	// On mount: load existing EPUBs
 	onMount(async () => {
 		try {
-			const res = await fetch('http://localhost:8080/library', { credentials: 'include' });
+			const res = await fetch('http://localhost:8080/protected/library', {
+				credentials: 'include'
+			});
 			if (!res.ok) return;
-			const urls: string[] = await res.json();
-			for (const url of urls) {
+
+			// 1) Destructure the JSON into its `files` array
+			const { files }: LibraryResponse = await res.json();
+
+			// 2) Iterate each FileInfo object
+			for (const fileInfo of files) {
+				const url = fileInfo.url;
 				const blobRes = await fetch(url, { credentials: 'include' });
 				if (!blobRes.ok) continue;
+
 				const blob = await blobRes.blob();
-				const filename = url.split('/').pop()!;
+				const filename = fileInfo.name; // you already have the name
 				const file = new File([blob], filename, { type: blob.type });
+
 				const meta = await parseEpubMetadata(file);
 				const book: Book = {
 					id: meta.id,
@@ -80,6 +100,7 @@
 					completion: 0,
 					fileUrl: url
 				};
+
 				onBookAdded(book);
 			}
 		} catch (e) {
@@ -105,7 +126,7 @@
 			const form = new FormData();
 			form.append('file', file);
 
-			const uploadRes = await fetch('http://localhost:8080/upload', {
+			const uploadRes = await fetch('http://localhost:8080/protected/upload', {
 				method: 'POST',
 				credentials: 'include',
 				body: form
