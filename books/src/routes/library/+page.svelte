@@ -1,14 +1,14 @@
-<!-- src/routes/library/+page.svelte -->
 <script lang="ts">
 	import BookCard from '../../lib/BookCard.svelte';
 	import NavBar from '../../lib/NavBar.svelte';
 	import SearchBar from '../../lib/SearchBar.svelte';
 	import EpubUpload from '../../lib/EpubUpload.svelte';
+	import BookReader from '../../lib/BookReader.svelte';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { LogOut, Settings, HelpCircle, User2 } from 'lucide-svelte';
-	export let data: { user: { email: string } };
 
+	let { data }: { data: { user: { email: string } } } = $props();
 	type BookStatus = 'read' | 'unread' | 'finished';
 	const modes = ['all', 'read', 'unread', 'finished'] as const;
 	type Mode = (typeof modes)[number];
@@ -20,199 +20,159 @@
 		image: string;
 		status: BookStatus;
 		completion: number;
+		fileUrl: string;
 	}
 
-	// Initialize with mock books
-	let books: Book[] = [
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'To Kill a Mockingbird',
-		// 	author: 'Harper Lee',
-		// 	image: '/default.webp',
-		// 	status: 'read',
-		// 	completion: 100
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: '1984',
-		// 	author: 'George Orwell',
-		// 	image: '/default.webp',
-		// 	status: 'finished',
-		// 	completion: 100
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'Pride and Prejudice',
-		// 	author: 'Jane Austen',
-		// 	image: '/default.webp',
-		// 	status: 'unread',
-		// 	completion: 0
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'The Great Gatsby',
-		// 	author: 'F. Scott Fitzgerald',
-		// 	image: '/default.webp',
-		// 	status: 'read',
-		// 	completion: 80
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'Moby-Dick',
-		// 	author: 'Herman Melville',
-		// 	image: '/default.webp',
-		// 	status: 'unread',
-		// 	completion: 10
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'War and Peace',
-		// 	author: 'Leo Tolstoy',
-		// 	image: '/default.webp',
-		// 	status: 'finished',
-		// 	completion: 100
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'The Catcher in the Rye',
-		// 	author: 'J.D. Salinger',
-		// 	image: '/default.webp',
-		// 	status: 'read',
-		// 	completion: 60
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'The Hobbit',
-		// 	author: 'J.R.R. Tolkien',
-		// 	image: '/default.webp',
-		// 	status: 'finished',
-		// 	completion: 100
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'Brave New World',
-		// 	author: 'Aldous Huxley',
-		// 	image: '/default.webp',
-		// 	status: 'unread',
-		// 	completion: 0
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'The Odyssey',
-		// 	author: 'Homer',
-		// 	image: '/default.webp',
-		// 	status: 'read',
-		// 	completion: 50
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: '1984',
-		// 	author: 'George Orwell',
-		// 	image: '/default.webp',
-		// 	status: 'finished',
-		// 	completion: 100
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'The Hobbit',
-		// 	author: 'J.R.R. Tolkien',
-		// 	image: '/default.webp',
-		// 	status: 'finished',
-		// 	completion: 100
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'To Kill a Mockingbird',
-		// 	author: 'Harper Lee',
-		// 	image: '/default.webp',
-		// 	status: 'read',
-		// 	completion: 100
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'Moby-Dick',
-		// 	author: 'Herman Melville',
-		// 	image: '/default.webp',
-		// 	status: 'unread',
-		// 	completion: 10
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'Pride and Prejudice',
-		// 	author: 'Jane Austen',
-		// 	image: '/default.webp',
-		// 	status: 'unread',
-		// 	completion: 0
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'The Odyssey',
-		// 	author: 'Homer',
-		// 	image: '/default.webp',
-		// 	status: 'read',
-		// 	completion: 50
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'War and Peace',
-		// 	author: 'Leo Tolstoy',
-		// 	image: '/default.webp',
-		// 	status: 'finished',
-		// 	completion: 100
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'The Catcher in the Rye',
-		// 	author: 'J.D. Salinger',
-		// 	image: '/default.webp',
-		// 	status: 'read',
-		// 	completion: 60
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'Brave New World',
-		// 	author: 'Aldous Huxley',
-		// 	image: '/default.webp',
-		// 	status: 'unread',
-		// 	completion: 0
-		// },
-		// {
-		// 	id: crypto.randomUUID(),
-		// 	title: 'The Great Gatsby',
-		// 	author: 'F. Scott Fitzgerald',
-		// 	image: '/default.webp',
-		// 	status: 'read',
-		// 	completion: 80
-		// }
-	];
-	data;
-	let searchTerm = '';
-	let statusFilter: Mode = 'all';
+	let books: Book[] = $state([]);
+	let searchTerm = $state('');
+	let statusFilter: Mode = $state('all');
+	let showMenu = $state(false);
+	let showReader = $state(false);
+	let currentBookId = $state('');
+	let currentBookUrl = $state('');
 
-	// Load books from localStorage on mount
+	onMount(async () => {
+		if (books.length === 0) {
+			await loadExistingBooks();
+		}
+	});
+
+	async function loadExistingBooks() {
+		try {
+			const res = await fetch('http://localhost:8080/protected/library', {
+				credentials: 'include'
+			});
+			if (!res.ok) return;
+
+			const { files } = await res.json();
+			const newBooks: Book[] = [];
+
+			for (const fileInfo of files) {
+				const url = fileInfo.url;
+				const blobRes = await fetch(url, { credentials: 'include' });
+				if (!blobRes.ok) continue;
+
+				const blob = await blobRes.blob();
+				const file = new File([blob], fileInfo.name, { type: blob.type });
+
+				const meta = await parseEpubMetadata(file);
+				const progressData = await loadBookProgress(meta.id);
+
+				const book: Book = {
+					id: meta.id,
+					title: meta.title,
+					author: meta.author,
+					image: meta.coverUrl || '/default.webp',
+					status: (progressData.completion === 100
+						? 'finished'
+						: progressData.completion > 0
+							? 'read'
+							: 'unread') as BookStatus,
+					completion: progressData.completion || 0,
+					fileUrl: url
+				};
+				newBooks.push(book);
+			}
+			books = newBooks;
+		} catch (e) {
+			console.error('Error loading existing EPUBs:', e);
+		}
+	}
+
+	// --- Updated to use Web Worker ---
+	async function parseEpubMetadata(file: File): Promise<{
+		id: string;
+		title: string;
+		author: string;
+		coverUrl: string | null;
+	}> {
+		return new Promise((resolve, reject) => {
+			const worker = new Worker(new URL('../../lib/epub-parser.worker.ts', import.meta.url), {
+				type: 'module'
+			});
+
+			worker.onmessage = (event) => {
+				const { success, payload, error } = event.data;
+				if (success) {
+					resolve(payload);
+				} else {
+					reject(new Error(error));
+				}
+				worker.terminate();
+			};
+
+			worker.onerror = (error) => {
+				reject(error);
+				worker.terminate();
+			};
+
+			worker.postMessage({ file });
+		});
+	}
+
+	async function loadBookProgress(bookId: string) {
+		try {
+			const response = await fetch(
+				`http://localhost:8080/protected/library/progress?bookId=${bookId}`,
+				{ credentials: 'include' }
+			);
+			if (response.ok) {
+				const data = await response.json();
+				return {
+					completion: data.progress || 0,
+					status: data.progress === 100 ? 'finished' : data.progress > 0 ? 'read' : 'unread'
+				};
+			}
+		} catch (error) {
+			console.error('Error loading book progress:', error);
+		}
+		return { completion: 0, status: 'unread' as BookStatus };
+	}
 
 	function handleBookAdded(book: Book) {
 		books = [...books, book];
 	}
 
-	$: filteredBooks = books.filter((b) => {
-		const q = searchTerm.trim().toLowerCase();
-		const matchesSearch =
-			!q || b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q);
+	function handleOpenBook(bookId: string, fileUrl: string) {
+		currentBookId = bookId;
+		currentBookUrl = fileUrl;
+		showReader = true;
+	}
 
-		const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
+	function handleCloseReader() {
+		showReader = false;
+		currentBookId = '';
+		currentBookUrl = '';
+	}
 
-		return matchesSearch && matchesStatus;
-	});
+	function handleProgressUpdate(bookId: string, progress: number) {
+		books = books.map((book) => {
+			if (book.id === bookId) {
+				return {
+					...book,
+					completion: progress,
+					status: progress === 100 ? 'finished' : progress > 0 ? 'read' : 'unread'
+				};
+			}
+			return book;
+		});
+	}
 
-	let showMenu = false;
+	let filteredBooks = $derived(
+		books.filter((b) => {
+			const q = searchTerm.trim().toLowerCase();
+			const matchesSearch =
+				!q || b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q);
+			const matchesStatus = statusFilter === 'all' || b.status === statusFilter;
+			return matchesSearch && matchesStatus;
+		})
+	);
 
 	function toggleMenu() {
 		showMenu = !showMenu;
 	}
 
 	async function logout() {
-		// clear cookies by making logout request
 		await fetch('http://localhost:8080/logout', {
 			method: 'POST',
 			credentials: 'include'
@@ -221,11 +181,18 @@
 	}
 </script>
 
-<!-- Nav bar -->
+{#if showReader}
+	<BookReader
+		bookId={currentBookId}
+		fileUrl={currentBookUrl}
+		onClose={handleCloseReader}
+		onProgressUpdate={handleProgressUpdate}
+	/>
+{/if}
+
 <NavBar showSecondaryRow={true}>
 	<div class="flex justify-center" slot="name">Library</div>
 
-	<!-- search -->
 	<div slot="center" class="relative flex items-center">
 		<SearchBar bind:value={searchTerm} />
 	</div>
@@ -254,11 +221,11 @@
 			<span class="hidden sm:inline">Store</span>
 		</button>
 
-		<!-- Replace the upload button with the EpubUpload component -->
 		<EpubUpload onBookAdded={handleBookAdded} />
+
 		<div class="relative">
 			<button
-				on:click={toggleMenu}
+				onclick={toggleMenu}
 				class="rounded-full p-2 transition hover:bg-gray-200 dark:hover:bg-gray-700"
 				aria-label="User menu"
 			>
@@ -281,7 +248,7 @@
 					</button>
 					<hr class="border-gray-300 dark:border-gray-600" />
 					<button
-						on:click={logout}
+						onclick={logout}
 						class="flex w-full items-center gap-2 px-4 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900"
 					>
 						<LogOut class="h-4 w-4" /> Logout
@@ -291,12 +258,11 @@
 		</div>
 	</div>
 
-	<!-- secondary row buttons -->
 	<div slot="secondary-center-buttons" class="flex gap-2">
 		{#each modes as mode}
 			<button
 				type="button"
-				on:click={() => (statusFilter = mode)}
+				onclick={() => (statusFilter = mode)}
 				class="
           cursor-pointer rounded-full bg-black/20 px-4 py-1 text-sm
           font-medium text-white
@@ -312,7 +278,6 @@
 	</div>
 </NavBar>
 
-<!-- Library page -->
 <div class="flex min-h-screen flex-col items-center justify-center py-4 pt-20">
 	<div class="mx-auto w-full px-2 md:px-4">
 		<div
@@ -320,7 +285,7 @@
 		>
 			{#if filteredBooks.length}
 				{#each filteredBooks as book (book.id)}
-					<BookCard {...book} />
+					<BookCard {...book} onOpenBook={handleOpenBook} />
 				{/each}
 			{:else}
 				<p class="col-span-full text-center text-gray-500">
