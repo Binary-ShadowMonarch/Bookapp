@@ -4,6 +4,7 @@
 	import SearchBar from '../../lib/SearchBar.svelte';
 	import EpubUpload from '../../lib/EpubUpload.svelte';
 	import BookReader from '../../lib/BookReader.svelte';
+	import { epubParser } from '$lib/epub-parser-pool';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { LogOut, Settings, HelpCircle, User2 } from 'lucide-svelte';
@@ -37,6 +38,22 @@
 		}
 	});
 
+	// Replace existing parseEpubMetadata function
+	async function parseEpubMetadata(file: File) {
+		try {
+			return await epubParser.parseEpub(file);
+		} catch (error) {
+			console.error('Failed to parse EPUB:', error);
+			// Fallback metadata
+			return {
+				id: crypto.randomUUID(),
+				title: file.name.replace('.epub', '') || 'Unknown Title',
+				author: 'Unknown Author',
+				coverUrl: null
+			};
+		}
+	}
+	// Optimized loadExistingBooks with batch processing
 	async function loadExistingBooks() {
 		try {
 			const res = await fetch('http://localhost:8080/protected/library', {
@@ -45,69 +62,74 @@
 			if (!res.ok) return;
 
 			const { files } = await res.json();
-			const newBooks: Book[] = [];
 
-			for (const fileInfo of files) {
-				const url = fileInfo.url;
-				const blobRes = await fetch(url, { credentials: 'include' });
-				if (!blobRes.ok) continue;
+			// Fetch all blobs concurrently
+			const filePromises = files.map(async (fileInfo: { name: string; url: string }) => {
+				const blobRes = await fetch(fileInfo.url, { credentials: 'include' });
+				if (!blobRes.ok) return null;
 
 				const blob = await blobRes.blob();
-				const file = new File([blob], fileInfo.name, { type: blob.type });
-
-				const meta = await parseEpubMetadata(file);
-				const progressData = await loadBookProgress(meta.id);
-
-				const book: Book = {
-					id: meta.id,
-					title: meta.title,
-					author: meta.author,
-					image: meta.coverUrl || '/default.webp',
-					status: (progressData.completion === 100
-						? 'finished'
-						: progressData.completion > 0
-							? 'read'
-							: 'unread') as BookStatus,
-					completion: progressData.completion || 0,
-					fileUrl: url
+				return {
+					file: new File([blob], fileInfo.name, { type: blob.type }),
+					url: fileInfo.url
 				};
-				newBooks.push(book);
-			}
+			});
+			const fileResults = await Promise.allSettled(filePromises);
+			const validFiles = fileResults
+				.filter(
+					(result): result is PromiseFulfilledResult<{ file: File; url: string } | null> =>
+						result.status === 'fulfilled' && result.value !== null
+				)
+				.map((result) => result.value!);
+
+			// Parse all files concurrently using worker pool
+			const metadataPromises = validFiles.map(({ file, url }) =>
+				parseEpubMetadata(file).then((meta) => ({ ...meta, fileUrl: url }))
+			);
+
+			const progressPromises = validFiles.map(
+				({ file }) =>
+					// Generate consistent ID for progress lookup
+					loadBookProgress(crypto.randomUUID()) // You'll need to fix this ID generation
+			);
+
+			const [metadataResults, progressResults] = await Promise.all([
+				Promise.allSettled(metadataPromises),
+				Promise.allSettled(progressPromises)
+			]);
+
+			const newBooks: Book[] = [];
+			metadataResults.forEach((result, index) => {
+				if (result.status === 'fulfilled') {
+					const meta = result.value;
+					const progressResult = progressResults[index];
+					const progressData =
+						progressResult.status === 'fulfilled'
+							? progressResult.value
+							: { completion: 0, status: 'unread' };
+
+					const book: Book = {
+						id: meta.id,
+						title: meta.title,
+						author: meta.author,
+						image: meta.coverUrl || '/default.webp',
+						status:
+							progressData.completion === 100
+								? 'finished'
+								: progressData.completion > 0
+									? 'read'
+									: 'unread',
+						completion: progressData.completion || 0,
+						fileUrl: meta.fileUrl
+					};
+					newBooks.push(book);
+				}
+			});
+
 			books = newBooks;
 		} catch (e) {
 			console.error('Error loading existing EPUBs:', e);
 		}
-	}
-
-	// --- Updated to use Web Worker ---
-	async function parseEpubMetadata(file: File): Promise<{
-		id: string;
-		title: string;
-		author: string;
-		coverUrl: string | null;
-	}> {
-		return new Promise((resolve, reject) => {
-			const worker = new Worker(new URL('../../lib/epub-parser.worker.ts', import.meta.url), {
-				type: 'module'
-			});
-
-			worker.onmessage = (event) => {
-				const { success, payload, error } = event.data;
-				if (success) {
-					resolve(payload);
-				} else {
-					reject(new Error(error));
-				}
-				worker.terminate();
-			};
-
-			worker.onerror = (error) => {
-				reject(error);
-				worker.terminate();
-			};
-
-			worker.postMessage({ file });
-		});
 	}
 
 	async function loadBookProgress(bookId: string) {

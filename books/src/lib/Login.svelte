@@ -1,4 +1,3 @@
-<!-- Login.svelte -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { Book } from 'lucide-svelte';
@@ -27,14 +26,15 @@
 					const json = await res.json();
 					if (json.message) message = json.message;
 				} else {
-					message = await res.text(); // fallback for plain text error messages
+					message = await res.text();
 				}
-
 				throw new Error(message);
 			}
 
+			// Redirect after successful login. SvelteKit's layout.server.ts will now
+			// correctly identify the user as authenticated based on new cookies.
 			await goto('/library');
-			console.log('logged in');
+			console.log('Logged in successfully!');
 		} catch (err: any) {
 			error = err.message || 'Unexpected error occurred';
 		}

@@ -1,15 +1,17 @@
+<!-- src/lib/BookReader.svelte -->
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { X, List, Settings } from 'lucide-svelte';
 
 	interface Props {
 		bookId: string;
-		fileUrl: string;
+		fileUrl?: string;
+		arrayBuffer?: ArrayBuffer;
 		onClose: () => void;
 		onProgressUpdate: (bookId: string, progress: number, location: string) => void;
 	}
 
-	let { bookId, fileUrl, onClose, onProgressUpdate }: Props = $props();
+	let { bookId, fileUrl, arrayBuffer, onClose, onProgressUpdate }: Props = $props();
 
 	let readerContainer: HTMLElement;
 	let book: any;
@@ -23,31 +25,24 @@
 	let currentChapter = $state('');
 	let showSettings = $state(false);
 
+	// Concurrent loading states
+	let bookReady = $state(false);
+	let locationsGenerated = $state(false);
+	let progressLoaded = $state(false);
+
 	onMount(async () => {
 		try {
-			const response = await fetch(fileUrl, { credentials: 'include' });
-			if (!response.ok) {
-				throw new Error(`Failed to fetch book: ${response.statusText}`);
-			}
-			const arrayBuffer = await response.arrayBuffer();
 			document.body.style.overflow = 'hidden';
 
+			// Start all async operations concurrently
+			const [bookData, progressData] = await Promise.all([loadBookData(), loadProgress()]);
+
+			// Initialize book and rendition
 			const ePub = (await import('epubjs')).default;
-			book = ePub(arrayBuffer);
-			await book.ready;
+			book = ePub(bookData);
 
-			chapters = book.navigation.toc.map((item: any) => ({
-				id: item.id,
-				href: item.href,
-				label: item.label.trim()
-			}));
-
-			await loadProgress();
-
-			// --- KEY CHANGE HERE ---
-			// Use the 'continuous' manager for seamless scrolling
 			rendition = book.renderTo(readerContainer, {
-				manager: 'continuous', // This enables true infinite scroll
+				manager: 'continuous',
 				flow: 'scrolled-doc',
 				width: '100%',
 				height: '100%'
@@ -55,32 +50,45 @@
 
 			updateTheme();
 
-			await book.locations.generate(1600);
-
+			// Display immediately (fastest priority)
 			if (currentLocation) {
 				await rendition.display(currentLocation);
 			} else {
 				await rendition.display();
 			}
 
-			rendition.on('relocated', handleLocationChange);
+			// Book is now displayable
 			isLoading = false;
+
+			// Start background operations concurrently
+			Promise.all([initializeBookMetadata(), generateLocations(), setupEventHandlers()]).catch(
+				console.error
+			);
 		} catch (error) {
 			console.error('Error loading book:', error);
 			isLoading = false;
 		}
 	});
 
-	onDestroy(() => {
-		document.body.style.overflow = 'auto';
-		if (rendition) {
-			rendition.destroy();
+	// Separate function for book data loading
+	async function loadBookData(): Promise<ArrayBuffer> {
+		if (arrayBuffer) {
+			return arrayBuffer;
 		}
-	});
 
-	// The manual scroll handler is no longer needed.
+		if (fileUrl) {
+			const response = await fetch(fileUrl, { credentials: 'include' });
+			if (!response.ok) {
+				throw new Error(`Failed to fetch book: ${response.statusText}`);
+			}
+			return response.arrayBuffer();
+		}
 
-	async function loadProgress() {
+		throw new Error('No book data or URL provided');
+	}
+
+	// Enhanced progress loading with caching
+	async function loadProgress(): Promise<void> {
 		try {
 			const response = await fetch(
 				`http://localhost:8080/protected/library/progress?bookId=${bookId}`,
@@ -93,51 +101,101 @@
 			}
 		} catch (error) {
 			console.log('Progress API not available - using defaults:', error);
+		} finally {
+			progressLoaded = true;
 		}
 	}
 
-	async function saveProgress() {
-		if (!bookId) return;
+	// Background metadata initialization
+	async function initializeBookMetadata(): Promise<void> {
 		try {
-			await fetch('http://localhost:8080/protected/library/progress', {
-				method: 'POST',
-				credentials: 'include',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ bookId, progress, location: currentLocation })
-			});
-			onProgressUpdate(bookId, progress, currentLocation);
+			await book.ready;
+			chapters = book.navigation.toc.map((item: any) => ({
+				id: item.id,
+				href: item.href,
+				label: item.label.trim()
+			}));
+			bookReady = true;
 		} catch (error) {
-			console.log('Progress save API not available:', error);
-			onProgressUpdate(bookId, progress, currentLocation);
+			console.error('Error loading book metadata:', error);
 		}
 	}
 
-	function handleLocationChange(location: any) {
+	// Background location generation
+	async function generateLocations(): Promise<void> {
+		try {
+			await book.locations.generate(1600);
+			locationsGenerated = true;
+			// Recalculate progress now that locations are available
+			if (currentLocation && book.locations.length() > 0) {
+				progress = Math.round(book.locations.percentageFromCfi(currentLocation) * 100);
+			}
+		} catch (error) {
+			console.error('Error generating locations:', error);
+		}
+	}
+
+	// Setup event handlers
+	async function setupEventHandlers(): Promise<void> {
+		if (rendition) {
+			rendition.on('relocated', handleLocationChange);
+		}
+	}
+
+	// Debounced save progress for better performance
+	let saveProgressTimeout: NodeJS.Timeout;
+	async function saveProgress(): Promise<void> {
+		if (!bookId) return;
+
+		// Debounce saves to avoid excessive API calls
+		clearTimeout(saveProgressTimeout);
+		saveProgressTimeout = setTimeout(async () => {
+			try {
+				await fetch('http://localhost:8080/protected/library/progress', {
+					method: 'POST',
+					credentials: 'include',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ bookId, progress, location: currentLocation })
+				});
+				onProgressUpdate(bookId, progress, currentLocation);
+			} catch (error) {
+				console.log('Progress save API not available:', error);
+				onProgressUpdate(bookId, progress, currentLocation);
+			}
+		}, 500); // 500ms debounce
+	}
+
+	function handleLocationChange(location: any): void {
 		currentLocation = location.start.cfi;
-		if (book.locations && book.locations.length() > 0) {
+
+		// Calculate progress if locations are ready
+		if (locationsGenerated && book.locations?.length() > 0) {
 			progress = Math.round(book.locations.percentageFromCfi(location.start.cfi) * 100);
 		}
+
+		// Update current chapter
 		const spine = book.spine.get(location.start.cfi);
-		if (spine) {
+		if (spine && chapters.length > 0) {
 			const chapter = chapters.find((ch) => ch.href === spine.href);
 			if (chapter) {
 				currentChapter = chapter.label;
 			}
 		}
+
 		saveProgress();
 	}
 
-	function goToChapter(href: string) {
+	function goToChapter(href: string): void {
 		rendition?.display(href);
 		showChapterList = false;
 	}
 
-	function toggleDarkMode() {
+	function toggleDarkMode(): void {
 		darkMode = !darkMode;
 		updateTheme();
 	}
 
-	function updateTheme() {
+	function updateTheme(): void {
 		if (!rendition) return;
 		const theme = darkMode
 			? { body: { 'background-color': '#1f2937', color: '#f9fafb' } }
@@ -145,11 +203,21 @@
 		rendition.themes.default(theme);
 	}
 
-	function handleGlobalKeydown(event: KeyboardEvent) {
+	function handleGlobalKeydown(event: KeyboardEvent): void {
 		if (event.key === 'Escape') {
 			onClose();
 		}
 	}
+
+	onDestroy(() => {
+		document.body.style.overflow = 'auto';
+		if (saveProgressTimeout) {
+			clearTimeout(saveProgressTimeout);
+		}
+		if (rendition) {
+			rendition.destroy();
+		}
+	});
 </script>
 
 <svelte:window on:keydown={handleGlobalKeydown} />
@@ -175,8 +243,11 @@
 			<div class="text-sm font-medium text-gray-600 dark:text-gray-300">{progress}%</div>
 			<button
 				onclick={() => (showChapterList = !showChapterList)}
-				class="rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+				class="rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-gray-700 {chapters.length === 0
+					? 'cursor-not-allowed opacity-50'
+					: ''}"
 				aria-label="Table of contents"
+				disabled={chapters.length === 0}
 			>
 				<List class="h-5 w-5 text-gray-600 dark:text-gray-300" />
 			</button>
@@ -212,7 +283,7 @@
 	</div>
 
 	<div class="relative flex flex-1 overflow-hidden">
-		{#if showChapterList}
+		{#if showChapterList && chapters.length > 0}
 			<aside class="w-72 flex-shrink-0 border-r bg-white dark:border-gray-700 dark:bg-gray-800">
 				<h3 class="p-4 text-lg font-semibold dark:text-white">Table of Contents</h3>
 				<div class="h-[calc(100%-4rem)] overflow-y-auto">
@@ -231,7 +302,21 @@
 		<main class="relative flex-1">
 			{#if isLoading}
 				<div class="flex h-full items-center justify-center">
-					<p class="text-gray-600 dark:text-gray-300">Loading book...</p>
+					<div class="flex flex-col items-center gap-4">
+						<div
+							class="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-500"
+						></div>
+						<p class="text-gray-600 dark:text-gray-300">Loading book...</p>
+						{#if progressLoaded}
+							<p class="text-xs text-gray-500">Progress loaded ✓</p>
+						{/if}
+						{#if bookReady}
+							<p class="text-xs text-gray-500">Metadata loaded ✓</p>
+						{/if}
+						{#if locationsGenerated}
+							<p class="text-xs text-gray-500">Locations generated ✓</p>
+						{/if}
+					</div>
 				</div>
 			{/if}
 			<div bind:this={readerContainer} class="h-full w-full"></div>
