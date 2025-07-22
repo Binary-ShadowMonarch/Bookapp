@@ -13,7 +13,7 @@ import (
 
 // Define TTLs for each token type
 const (
-	AccessTTL  = 30 * time.Minute
+	AccessTTL  = 15 * time.Second
 	RefreshTTL = 7 * 24 * time.Hour // 7 days
 )
 

@@ -32,8 +32,38 @@
 	let currentBookId = $state('');
 	let currentBookUrl = $state('');
 
+	async function check(): Promise<boolean> {
+		let res = await fetch('http://localhost:8080/protected/library', {
+			method: 'GET',
+			credentials: 'include'
+		});
+
+		// 2) if unauthorized, try a refresh and retry
+		if (res.status === 401) {
+			const refresh = await fetch('http://localhost:8080/refresh', {
+				method: 'POST',
+				credentials: 'include'
+			});
+			if (refresh.ok) {
+				// retry the library fetch
+				res = await fetch('http://localhost:8080/protected/library', {
+					method: 'GET',
+					credentials: 'include'
+				});
+				window.location.reload();
+			}
+		}
+		// 3) if still not ok, send back to login
+		if (res.status === 401 || !res.ok) {
+			goto('/login');
+			return false;
+		}
+		return true;
+	}
+
 	onMount(async () => {
-		if (books.length === 0) {
+		const ok = await check();
+		if (ok) {
 			await loadExistingBooks();
 		}
 	});

@@ -1,10 +1,37 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { Book } from 'lucide-svelte';
-
+	import { onMount } from 'svelte';
 	let email = '';
 	let password = '';
 	let error: string | null = null;
+
+	async function check() {
+		let res = await fetch('http://localhost:8080/protected/library', {
+			method: 'GET',
+			credentials: 'include'
+		});
+
+		// 2) if unauthorized, try a refresh and retry
+		if (res.status === 401) {
+			const refresh = await fetch('http://localhost:8080/refresh', {
+				method: 'POST',
+				credentials: 'include'
+			});
+			if (refresh.ok) {
+				// retry the library fetch
+				res = await fetch('http://localhost:8080/protected/library', {
+					method: 'GET',
+					credentials: 'include'
+				});
+				goto('/library');
+				return;
+			}
+		}
+	}
+	onMount(async () => {
+		check();
+	});
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
@@ -33,8 +60,8 @@
 
 			// Redirect after successful login. SvelteKit's layout.server.ts will now
 			// correctly identify the user as authenticated based on new cookies.
-			await goto('/library');
 			console.log('Logged in successfully!');
+			goto('/library');
 		} catch (err: any) {
 			error = err.message || 'Unexpected error occurred';
 		}
