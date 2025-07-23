@@ -13,7 +13,7 @@
 	// --- REACTIVE STATE ---
 	$: mail = form?.mail || data.mail;
 	$: serverError = form?.error;
-	// $: resendSuccess = form?.resendSuccess;
+	$: resendSuccess = form?.resendSuccess;
 
 	// --- LOCAL COMPONENT STATE ---
 	let code = ['', '', '', '', '', ''];
@@ -30,13 +30,11 @@
 	onMount(() => {
 		// Page protection - warn before leaving
 		const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-			if (code.some((digit) => digit !== '')) {
-				e.preventDefault();
-				e.returnValue = 'Changes in this site could be lost. Confirm resubmission?';
-				return e.returnValue;
-			}
-		};
+			e.preventDefault();
+			// e.returnValue = 'Changes in this site could be lost. Confirm resubmission?';
 
+			return '';
+		};
 		window.addEventListener('beforeunload', handleBeforeUnload);
 
 		// Expiry timer - redirects to signup when expired
@@ -67,10 +65,10 @@
 	});
 
 	// Reset resend timer after successful resend
-	// $: if (resendSuccess) {
-	// 	resendTime = 180;
-	// 	canResend = false;
-	// }
+	$: if (resendSuccess) {
+		resendTime = 180;
+		canResend = false;
+	}
 
 	// --- EVENT HANDLERS ---
 	function handleInput(index: number, event: Event) {
@@ -121,7 +119,7 @@
 	<title>Verify Email - Books</title>
 </svelte:head>
 
-<div class="container">
+<div class="container justify-center">
 	<div class="card">
 		<div class="header">
 			<a href="/" class="logo" aria-label="Homepage">
@@ -144,6 +142,7 @@
 			<!-- Verification Form -->
 			<form
 				method="POST"
+				action="?/verify"
 				use:enhance={() => {
 					isVerifying = true;
 					return async ({ update }) => {
@@ -155,9 +154,9 @@
 				<input type="hidden" name="mail" value={mail} />
 				<input type="hidden" name="code" value={code.join('')} />
 
-				<!-- {#if serverError && !resendSuccess}
-					<p class="server-error" role="alert">{serverError}</p>
-				{/if} -->
+				{#if serverError && !resendSuccess}
+					<div class="server-error" role="alert">{serverError}</div>
+				{/if}
 
 				<div class="code-inputs">
 					{#each code as _, index}
@@ -207,9 +206,9 @@
 				</form>
 			</div>
 
-			<!-- {#if resendSuccess}
-				<p class="resend-success-message" role="status">A new code has been sent.</p>
-			{/if} -->
+			{#if resendSuccess}
+				<div class="resend-success-message" role="status">A new code has been sent.</div>
+			{/if}
 		</div>
 	</div>
 </div>

@@ -42,12 +42,12 @@ export const actions: Actions = {
                 const err = await res.text();
                 return fail(res.status, { mail, error: err.toUpperCase() });
             }
-
+            const token = crypto.randomUUID();
             // Set pending cookie for verification step
-            cookies.set('pending', 'true', {
+            cookies.set('pending', 'token', {
                 path: '/',
                 httpOnly: true,
-                secure: false,
+                secure: true,
                 maxAge: 300, // 5 minutes to match verification expiry
                 sameSite: 'lax'
             });

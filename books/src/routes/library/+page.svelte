@@ -31,29 +31,28 @@
 	let showReader = $state(false);
 	let currentBookId = $state('');
 	let currentBookUrl = $state('');
-
+	let loading = $state(true);
+	// 2) tweak your check() so it never reloads the page (we’ll control it)
 	async function check(): Promise<boolean> {
 		let res = await fetch('http://localhost:8080/protected/library', {
 			method: 'GET',
 			credentials: 'include'
 		});
 
-		// 2) if unauthorized, try a refresh and retry
 		if (res.status === 401) {
 			const refresh = await fetch('http://localhost:8080/refresh', {
 				method: 'POST',
 				credentials: 'include'
 			});
 			if (refresh.ok) {
-				// retry the library fetch
+				// retry once
 				res = await fetch('http://localhost:8080/protected/library', {
 					method: 'GET',
 					credentials: 'include'
 				});
-				window.location.reload();
 			}
 		}
-		// 3) if still not ok, send back to login
+
 		if (res.status === 401 || !res.ok) {
 			goto('/login');
 			return false;
@@ -62,10 +61,16 @@
 	}
 
 	onMount(async () => {
+		// 3) start spinner
+		loading = true;
+
 		const ok = await check();
 		if (ok) {
 			await loadExistingBooks();
 		}
+
+		// 4) stop spinner (reveals the library)
+		loading = false;
 	});
 
 	// Replace existing parseEpubMetadata function
@@ -233,6 +238,12 @@
 	}
 </script>
 
+{#if loading}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+		<span class="loading loading-ring loading-xl"></span>
+	</div>
+{/if}
+
 {#if showReader}
 	<BookReader
 		bookId={currentBookId}
@@ -241,81 +252,81 @@
 		onProgressUpdate={handleProgressUpdate}
 	/>
 {/if}
+{#if !loading}
+	<NavBar showSecondaryRow={true}>
+		<div class="flex justify-center" slot="name">Library</div>
 
-<NavBar showSecondaryRow={true}>
-	<div class="flex justify-center" slot="name">Library</div>
+		<div slot="center" class="relative flex items-center">
+			<SearchBar bind:value={searchTerm} />
+		</div>
 
-	<div slot="center" class="relative flex items-center">
-		<SearchBar bind:value={searchTerm} />
-	</div>
-
-	<div slot="right-buttons" class="flex justify-center gap-4 sm:flex-row">
-		<button
-			aria-label="Store"
-			class="flex cursor-pointer items-center gap-2 rounded-full bg-indigo-500 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="20"
-				height="20"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				class="h-5 w-5"
-			>
-				<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-				<path d="M3 6h18" />
-				<path d="M16 10a4 4 0 0 1-8 0" />
-			</svg>
-			<span class="hidden sm:inline">Store</span>
-		</button>
-
-		<EpubUpload onBookAdded={handleBookAdded} />
-
-		<div class="relative">
+		<div slot="right-buttons" class="flex justify-center gap-4 sm:flex-row">
 			<button
-				onclick={toggleMenu}
-				class="rounded-full p-2 transition hover:bg-gray-200 dark:hover:bg-gray-700"
-				aria-label="User menu"
+				aria-label="Store"
+				class="flex cursor-pointer items-center gap-2 rounded-full bg-indigo-500 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
 			>
-				<User2 class="h-6 w-6 text-gray-800 dark:text-white" />
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					class="h-5 w-5"
+				>
+					<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+					<path d="M3 6h18" />
+					<path d="M16 10a4 4 0 0 1-8 0" />
+				</svg>
+				<span class="hidden sm:inline">Store</span>
 			</button>
 
-			{#if showMenu}
-				<div
-					class="absolute right-0 z-50 mt-2 w-48 rounded-lg bg-white text-sm shadow-lg dark:bg-gray-800"
-				>
-					<button
-						class="flex w-full items-center gap-2 px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
-					>
-						<Settings class="h-4 w-4" /> Settings
-					</button>
-					<button
-						class="flex w-full items-center gap-2 px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
-					>
-						<HelpCircle class="h-4 w-4" /> Help & Support
-					</button>
-					<hr class="border-gray-300 dark:border-gray-600" />
-					<button
-						onclick={logout}
-						class="flex w-full items-center gap-2 px-4 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900"
-					>
-						<LogOut class="h-4 w-4" /> Logout
-					</button>
-				</div>
-			{/if}
-		</div>
-	</div>
+			<EpubUpload onBookAdded={handleBookAdded} />
 
-	<div slot="secondary-center-buttons" class="flex gap-2">
-		{#each modes as mode}
-			<button
-				type="button"
-				onclick={() => (statusFilter = mode)}
-				class="
+			<div class="relative">
+				<button
+					onclick={toggleMenu}
+					class="rounded-full p-2 transition hover:bg-gray-200 dark:hover:bg-gray-700"
+					aria-label="User menu"
+				>
+					<User2 class="h-6 w-6 text-gray-800 dark:text-white" />
+				</button>
+
+				{#if showMenu}
+					<div
+						class="absolute right-0 z-50 mt-2 w-48 rounded-lg bg-white text-sm shadow-lg dark:bg-gray-800"
+					>
+						<button
+							class="flex w-full items-center gap-2 px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+						>
+							<Settings class="h-4 w-4" /> Settings
+						</button>
+						<button
+							class="flex w-full items-center gap-2 px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+						>
+							<HelpCircle class="h-4 w-4" /> Help & Support
+						</button>
+						<hr class="border-gray-300 dark:border-gray-600" />
+						<button
+							onclick={logout}
+							class="flex w-full items-center gap-2 px-4 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900"
+						>
+							<LogOut class="h-4 w-4" /> Logout
+						</button>
+					</div>
+				{/if}
+			</div>
+		</div>
+
+		<div slot="secondary-center-buttons" class="flex gap-2">
+			{#each modes as mode}
+				<button
+					type="button"
+					onclick={() => (statusFilter = mode)}
+					class="
           cursor-pointer rounded-full bg-black/20 px-4 py-1 text-sm
           font-medium text-white
           backdrop-blur-sm transition-colors duration-200
@@ -323,27 +334,30 @@
           hover:bg-white/15
           {statusFilter === mode ? 'bg-white/30' : ''}
         "
-			>
-				{mode === 'all' ? 'All Books' : mode[0].toUpperCase() + mode.slice(1)}
-			</button>
-		{/each}
-	</div>
-</NavBar>
+				>
+					{mode === 'all' ? 'All Books' : mode[0].toUpperCase() + mode.slice(1)}
+				</button>
+			{/each}
+		</div>
+	</NavBar>
 
-<div class="flex min-h-screen flex-col items-center justify-center py-4 pt-20">
-	<div class="mx-auto w-full px-2 md:px-4">
-		<div
-			class="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
-		>
-			{#if filteredBooks.length}
-				{#each filteredBooks as book (book.id)}
-					<BookCard {...book} onOpenBook={handleOpenBook} />
-				{/each}
-			{:else}
-				<p class="col-span-full text-center text-gray-500">
-					Add a new book "{searchTerm}" {statusFilter !== 'all' ? `and status=${statusFilter}` : ''}
-				</p>
-			{/if}
+	<div class="flex min-h-screen flex-col items-center justify-center py-4 pt-20">
+		<div class="mx-auto w-full px-2 md:px-4">
+			<div
+				class="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+			>
+				{#if filteredBooks.length}
+					{#each filteredBooks as book (book.id)}
+						<BookCard {...book} onOpenBook={handleOpenBook} />
+					{/each}
+				{:else}
+					<p class="col-span-full text-center text-gray-500">
+						Add a new book "{searchTerm}" {statusFilter !== 'all'
+							? `and status=${statusFilter}`
+							: ''}
+					</p>
+				{/if}
+			</div>
 		</div>
 	</div>
-</div>
+{/if}

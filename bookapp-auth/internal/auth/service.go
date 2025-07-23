@@ -17,6 +17,8 @@ import (
 
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 
 	"io"
 	"mime/multipart"
@@ -31,6 +33,8 @@ var ErrInvalidCredentials = errors.New("invalid credentials")
 
 // ErrUnauthorized is returned when a request lacks a valid JWT.
 var ErrUnauthorized = errors.New("unauthorized")
+
+var ErrEmailExistsLocal = errors.New("an account with this email already exists with a password, please log in with your password")
 
 // UserStore defines the methods we need for your store.
 type UserStore interface {
@@ -52,9 +56,10 @@ type UserStore interface {
 
 // Service wraps auth logic.
 type Service struct {
-	store      UserStore
-	minio      *minio.Client
-	bucketPref string
+	store             UserStore
+	minio             *minio.Client
+	bucketPref        string
+	googleOAuthConfig *oauth2.Config
 }
 
 // NewService constructs the auth Service.
@@ -72,10 +77,25 @@ func NewService(us UserStore) *Service {
 		log.Fatalf("unable to initialize MinIO client: %v", err)
 	}
 
+	// 2) Construct Google OAuth2 Config
+	googleOAuthConfig := &oauth2.Config{
+		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
+		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
+		// This is the URL Google will redirect to after the user signs in.
+		// It must be one of the "Authorized redirect URIs" in your Google Cloud Console.
+		RedirectURL: os.Getenv("GOOGLE_REDIRECT_URL"), // e.g., "http://localhost:8080/auth/google/callback"
+		Scopes: []string{
+			"https://www.googleapis.com/auth/userinfo.email",
+			"https://www.googleapis.com/auth/userinfo.profile",
+		},
+		Endpoint: google.Endpoint,
+	}
+
 	return &Service{
-		store:      us,
-		minio:      mc,
-		bucketPref: "user-", // prefix for buckets
+		store:             us,
+		minio:             mc,
+		bucketPref:        "user-",           // prefix for buckets
+		googleOAuthConfig: googleOAuthConfig, // store it in the service
 	}
 }
 
@@ -107,7 +127,7 @@ func (s *Service) RequestVerification(email, password string) error {
 
 	// generate 6‑digit code
 	code := fmt.Sprintf("%06d", rand.Intn(1_000_000))
-	expires := time.Now().UTC().Add(15 * time.Minute)
+	expires := time.Now().UTC().Add(5 * time.Minute)
 
 	// persist
 	if err := s.store.SaveVerification(email, hashed, code, expires); err != nil {

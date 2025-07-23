@@ -30,8 +30,8 @@
 		const handleBeforeUnload = (e: BeforeUnloadEvent) => {
 			if (mail || password) {
 				e.preventDefault();
-				e.returnValue = 'Changes in this site could be lost. Confirm resubmission?';
-				return e.returnValue;
+
+				return '';
 			}
 		};
 
@@ -150,13 +150,6 @@
 </div>
 
 <style>
-	:global(body) {
-		margin: 0;
-		font-family: system-ui, sans-serif;
-		color: white;
-		background: #1a001f;
-	}
-
 	.container {
 		display: flex;
 		justify-content: center;
