@@ -41,7 +41,7 @@
 
 		if (res.status === 401) {
 			const refresh = await fetch('http://localhost:8080/refresh', {
-				method: 'POST',
+				method: 'GET',
 				credentials: 'include'
 			});
 			if (refresh.ok) {
@@ -66,10 +66,8 @@
 
 		const ok = await check();
 		if (ok) {
-			await loadExistingBooks();
+			loadExistingBooks();
 		}
-
-		// 4) stop spinner (reveals the library)
 		loading = false;
 	});
 

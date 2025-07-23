@@ -8,7 +8,6 @@ import (
 var allowedOrigins = map[string]bool{
 	"http://localhost:5173": true,
 	"http://127.0.0.1:5173": true,
-	// add more origins here as needed, e.g. QA or staging URLs
 }
 
 // CORS wraps your handler and enforces origin checks.

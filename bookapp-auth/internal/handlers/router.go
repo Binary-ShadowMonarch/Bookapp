@@ -17,6 +17,11 @@ func NewRouter(svc *auth.Service) http.Handler {
 	mux.Handle("/refresh", middleware.CORS(RefreshHandler(svc)))
 	mux.Handle("/logout", middleware.CORS(LogoutHandler(svc)))
 
+	// This route starts the Google sign-in process.
+	mux.Handle("/auth/google/login", middleware.CORS(GoogleLoginHandler(svc)))
+	// This is the callback URL that you configured in your Google Cloud Console.
+	mux.Handle("/auth/google/callback", middleware.CORS(GoogleCallbackHandler(svc)))
+
 	// Protected routes under /protected prefix
 	protectedMux := http.NewServeMux()
 
