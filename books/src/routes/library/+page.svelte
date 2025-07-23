@@ -65,9 +65,10 @@
 		loading = true;
 
 		const ok = await check();
-		if (ok) {
-			loadExistingBooks();
+		if (!ok) {
+			return;
 		}
+		await loadExistingBooks();
 		loading = false;
 	});
 
