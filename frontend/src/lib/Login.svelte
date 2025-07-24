@@ -7,11 +7,15 @@
 	let error: string | null = null;
 
 	async function check() {
-		let res = await fetch('http://localhost:8080/protected/library', {
+		let res = await fetch('http://localhost:8080/protected/profile', {
 			method: 'GET',
 			credentials: 'include'
 		});
 
+		if (res.ok) {
+			goto('/library');
+			return;
+		}
 		// 2) if unauthorized, try a refresh and retry
 		if (res.status === 401) {
 			const refresh = await fetch('http://localhost:8080/refresh', {
