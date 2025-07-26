@@ -1,3 +1,4 @@
+// internal/handler/google.go
 package handlers
 
 import (
@@ -93,7 +94,7 @@ func GoogleCallbackHandler(svc *auth.Service) http.HandlerFunc {
 		// 5. Redirect the user to the main application page.
 		// The frontend will now have the tokens and can access protected routes.
 		http.Redirect(w, r,
-			"http://localhost:5173/library",
+			"/library",
 			http.StatusSeeOther,
 		)
 	}

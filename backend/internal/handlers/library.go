@@ -5,6 +5,8 @@ import (
 	"bookapp/internal/auth"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -34,6 +36,7 @@ func LibraryHandler(svc *auth.Service) http.HandlerFunc {
 	}
 }
 
+// internal/handlers/library.go - Updated handleGetLibrary function
 func handleGetLibrary(svc *auth.Service, w http.ResponseWriter, r *http.Request) {
 	// Extract user from context (set by JWT middleware)
 	email, err := svc.Authorize(r)
@@ -54,20 +57,23 @@ func handleGetLibrary(svc *auth.Service, w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Convert URLs to FileInfo structs
+	// Convert URLs to FileInfo structs with proxy URLs
 	files := make([]FileInfo, len(urls))
 	for i, url := range urls {
-		// Extract filename from URL (basic implementation)
+		// Extract filename from MinIO URL
 		parts := strings.Split(url, "/")
 		filename := "unknown"
 		if len(parts) > 0 {
 			filename = parts[len(parts)-1]
 		}
 
+		// Create proxy URL instead of direct MinIO URL
+		proxyURL := fmt.Sprintf("/api/protected/files/user-%d/%s", user.ID, filename)
+
 		files[i] = FileInfo{
-			ID:   strconv.Itoa(i), // maybe use actual file IDs
+			ID:   strconv.Itoa(i), // Consider using actual file IDs
 			Name: filename,
-			URL:  url,
+			URL:  proxyURL, // Use proxy URL instead of direct MinIO URL
 		}
 	}
 
@@ -209,4 +215,62 @@ func handleGetProfile(svc *auth.Service, w http.ResponseWriter, r *http.Request)
 func handleUpdateProfile(svc *auth.Service, w http.ResponseWriter, r *http.Request) {
 	// TODO: Implement profile updates
 	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Add this to handlers/library.go
+
+func FileProxyHandler(svc *auth.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Only allow GET requests
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Authorize user
+		email, err := svc.Authorize(r)
+		if err != nil {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		user, err := svc.GetUserByEmail(email)
+		if err != nil {
+			http.Error(w, "user lookup failed", http.StatusInternalServerError)
+			return
+		}
+
+		// Extract bucket and object from path: /files/user-123/filename.epub
+		path := strings.TrimPrefix(r.URL.Path, "/files/")
+		parts := strings.SplitN(path, "/", 2)
+		if len(parts) != 2 {
+			http.Error(w, "invalid file path", http.StatusBadRequest)
+			return
+		}
+
+		bucket := parts[0]
+		objectName := parts[1]
+
+		// Verify user owns this bucket
+		expectedBucket := fmt.Sprintf("user-%d", user.ID)
+		if bucket != expectedBucket {
+			http.Error(w, "access denied", http.StatusForbidden)
+			return
+		}
+
+		// Get file from MinIO and stream it
+		obj, err := svc.GetFileStream(r.Context(), user.ID, objectName)
+		if err != nil {
+			http.Error(w, "file not found", http.StatusNotFound)
+			return
+		}
+		defer obj.Close()
+
+		// Set appropriate headers
+		w.Header().Set("Content-Type", "application/epub+zip")
+		w.Header().Set("Cache-Control", "private, max-age=3600")
+
+		// Stream the file
+		io.Copy(w, obj)
+	}
 }

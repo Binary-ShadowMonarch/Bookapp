@@ -32,7 +32,7 @@ export const actions: Actions = {
         }
 
         try {
-            const res = await fetch('http://localhost:8080/signup/request', {
+            const res = await fetch('http://backend:8080/api/register/request', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: new URLSearchParams({ mail, password })
@@ -44,7 +44,7 @@ export const actions: Actions = {
             }
             const token = crypto.randomUUID();
             // Set pending cookie for verification step
-            cookies.set('pending', 'token', {
+            cookies.set('pending', token, {
                 path: '/',
                 httpOnly: true,
                 secure: true,

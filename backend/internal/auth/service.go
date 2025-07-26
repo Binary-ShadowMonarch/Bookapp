@@ -3,6 +3,8 @@ package auth
 
 import (
 	"bookapp/internal/models" // or "bookapp/internal/models" per your module
+	"bookapp/internal/store"
+
 	// or "bookapp/internal/models" per your module
 	"context"
 	"errors" // for ErrInvalidCredentials,ErrUnauthorized, errors.New
@@ -54,7 +56,7 @@ type UserStore interface {
 	SaveVerification(email, hashedPw, code string, expiresAt time.Time) error
 	GetVerification(email, code string) (hashedPw string, err error)
 	DeleteVerification(email string) error
-	DeleteAllRefreshTokensForUser(userID int) error // ADD THIS LINE
+	DeleteAllRefreshTokensForUser(userID int) error
 }
 
 // Service wraps auth logic.
@@ -69,8 +71,8 @@ type Service struct {
 func NewService(us UserStore) *Service {
 	// 1) Construct MinIO client
 	endpoint := os.Getenv("MINIO_ENDPOINT") // e.g. "play.min.io:9000"
-	accessKey := os.Getenv("MINIO_KEY")
-	secretKey := os.Getenv("MINIO_SECRET")
+	accessKey := os.Getenv("MINIO_ACCESS_KEY")
+	secretKey := os.Getenv("MINIO_SECRET_KEY")
 
 	mc, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
@@ -104,23 +106,27 @@ func NewService(us UserStore) *Service {
 
 func (s *Service) RequestVerification(email, password string) error {
 	if email == "" || len(password) < 8 {
-		return errors.New("invalid")
+		return errors.New("invalid credentials")
 	}
 
 	// Check if user exists by email
-	_, err := s.store.FindByEmail(email)
+	u, err := s.store.FindByEmail(email)
 	if err != nil {
 		// Check if it's a "user not found" error (you need to import your store package or use the specific error)
-		// Replace this with your actual ErrUserNotFound from your store package
-		if err.Error() == "user not found" || err.Error() == "sql: no rows in result set" {
+		if err == store.ErrUserNotFound {
+			log.Printf("NEW USER")
 			// User NOT found - continue with verification process (this is for new registrations)
 		} else {
 			// Some other database error
+			log.Printf("new err")
+
 			return err
 		}
 	} else {
+		log.Printf("user exists")
+
 		// User EXISTS - return error to prevent duplicate registrations
-		return errors.New("account associated with this email already exists")
+		return fmt.Errorf("ACCOUNT ASSOCIATED WITH THIS EMAIL EXISTS SIGN IN USING %s", strings.ToUpper(u.Provider))
 	}
 
 	hashed, err := HashPassword(password)
@@ -369,7 +375,7 @@ func (s *Service) UploadFile(ctx context.Context, userID int, file multipart.Fil
 	}
 
 	// Construct a URL – adjust to your MinIO endpoint / gateway
-	url := fmt.Sprintf("http://%s/%s/%s", s.minio.EndpointURL().Host, bucket, info.Key)
+	url := fmt.Sprintf("/api/protected/files/%s/%s", bucket, info.Key)
 	return url, nil
 }
 
@@ -498,7 +504,8 @@ func (s *Service) LoginOrRegisterWithGoogle(ctx context.Context, code string) (a
 	// Case A: User does NOT exist in our DB.
 	if err != nil {
 		// If the error is anything other than "not found", it's a real DB problem.
-		if err != ErrUserNotFound {
+		log.Printf("DEBUG: FindByEmail error: %v (type: %T)", err, err)
+		if err != store.ErrUserNotFound {
 			return "", "", err
 		}
 
@@ -588,12 +595,11 @@ func (s *Service) issueAndSaveTokens(u *models.User) (accessToken, refreshToken 
 // Modify your Login function to use the new helper
 func (s *Service) Login(mail, password string) (accessToken, refreshToken string, err error) {
 	u, err := s.store.FindByEmail(mail)
+	if u.Provider != "local" {
+		return "", "", fmt.Errorf("ACCOUNT ASSOCIATED WITH THIS EMAIL EXISTS SIGN IN USING %s", strings.ToUpper(u.Provider))
+	}
 	if err != nil || !CheckPassword(u.HashedPassword, password) {
 		return "", "", ErrInvalidCredentials
-	}
-
-	if u.Provider != "local" {
-		return "", "", fmt.Errorf("please sign in using %s", u.Provider)
 	}
 
 	return s.issueAndSaveTokens(u)
@@ -623,4 +629,9 @@ func (s *Service) VerifyCode(email, code string) error {
 // GoogleAuthCodeURL returns the URL for the Google consent page.
 func (s *Service) GoogleAuthCodeURL(state string) string {
 	return s.googleOAuthConfig.AuthCodeURL(state)
+}
+
+func (s *Service) GetFileStream(ctx context.Context, userID int, fileName string) (*minio.Object, error) {
+	bucket := s.bucketPref + strconv.Itoa(userID)
+	return s.minio.GetObject(ctx, bucket, fileName, minio.GetObjectOptions{})
 }

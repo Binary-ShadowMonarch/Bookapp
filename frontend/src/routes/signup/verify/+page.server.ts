@@ -33,7 +33,7 @@ export const actions: Actions = {
         }
 
         try {
-            const res = await fetch('http://localhost:8080/signup/verify', {
+            const res = await fetch('http://backend:8080/api/register/verify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: new URLSearchParams({ mail, code })
@@ -72,8 +72,9 @@ export const actions: Actions = {
 
         try {
             console.log(mail)
-            const res = await fetch('http://localhost:8080/signup/resend', {
+            const res = await fetch('/api/signup/resend', {
                 method: 'POST',
+
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 body: new URLSearchParams({ mail })
             });

@@ -1,13 +1,16 @@
+<!-- src/lib/Login.svelte -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { Book } from 'lucide-svelte';
+	import { Book, Eye, EyeOff } from 'lucide-svelte';
 	import { onMount } from 'svelte';
+	
 	let email = '';
 	let password = '';
 	let error: string | null = null;
+	let showPassword = false;
 
 	async function check() {
-		let res = await fetch('http://localhost:8080/protected/profile', {
+		let res = await fetch('/api/protected/profile', {
 			method: 'GET',
 			credentials: 'include'
 		});
@@ -18,13 +21,13 @@
 		}
 		// 2) if unauthorized, try a refresh and retry
 		if (res.status === 401) {
-			const refresh = await fetch('http://localhost:8080/refresh', {
+			const refresh = await fetch('/api/refresh', {
 				method: 'POST',
 				credentials: 'include'
 			});
 			if (refresh.ok) {
 				// retry the library fetch
-				res = await fetch('http://localhost:8080/protected/library', {
+				res = await fetch('/api/protected/library', {
 					method: 'GET',
 					credentials: 'include'
 				});
@@ -33,16 +36,21 @@
 			}
 		}
 	}
+	
 	onMount(async () => {
 		check();
 	});
+
+	function togglePassword() {
+		showPassword = !showPassword;
+	}
 
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		error = null;
 
 		try {
-			const res = await fetch('http://localhost:8080/login', {
+			const res = await fetch('/api/login', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
 				body: new URLSearchParams({ mail: email, password }),
@@ -108,7 +116,7 @@
 	<div class="flex-column">
 		<label for="password">Password</label>
 	</div>
-	<div class="inputForm">
+	<div class="inputForm password-container">
 		<!-- Password icon -->
 		<svg height="20" viewBox="-64 0 512 512" width="20" xmlns="http://www.w3.org/2000/svg">
 			<path
@@ -118,15 +126,29 @@
 				d="m304 224c-8.832031 0-16-7.167969-16-16v-80c0-52.929688-43.070312-96-96-96s-96 43.070312-96 96v80c0 8.832031-7.167969 16-16 16s-16-7.167969-16-16v-80c0-70.59375 57.40625-128 128-128s128 57.40625 128 128v80c0 8.832031-7.167969 16-16 16zm0 0"
 			/>
 		</svg>
+							<div class="password-input-container">
+
 		<input
 			id="password"
-			type="password"
-			class="input"
+			type={showPassword ? 'text' : 'password'}
+			class="input password-input"
 			placeholder="Enter your Password"
 			bind:value={password}
 			required
 		/>
+						<button
+							type="button"
+							class="password-toggle"
+							on:click={togglePassword}
+							aria-label={showPassword ? 'Hide password' : 'Show password'}
+						>
+							{#if showPassword}
+								<EyeOff class="h-4 w-4" />
+							{:else}
+								<Eye class="h-4 w-4" />
+							{/if}
 	</div>
+</div>
 
 	<!-- Centered Forgot Password as button for accessibility -->
 	<div class="forgot-container">
@@ -138,13 +160,15 @@
 	<button type="submit" class="button-submit signin">Sign In</button>
 
 	<p class="p">
-		Don't have an account? <button type="button" class="link-inline">Sign Up</button>
+		Don't have an account? <button type="button" class="link-inline"
+			><a href="/signup">Sign Up</a></button
+		>
 	</p>
 
 	<p class="p line">Or Continue Using</p>
 
 	<button type="button" class="btn google">
-		<a class="flex gap-2" aria-label="GoogleAuth" href="http://localhost:8080/auth/google/login">
+		<a class="flex gap-2" aria-label="GoogleAuth" href="/api/auth/google/login">
 			<svg
 				version="1.1"
 				width="20"
@@ -180,25 +204,11 @@
 					d="M419.404,58.936l-82.933,67.896c-23.335-14.586-50.919-23.012-80.471-23.012
 		c-66.729,0-123.429,42.957-143.965,102.724l-83.397-68.276h-0.014C71.23,56.123,157.06,0,256,0
 		C318.115,0,375.068,22.126,419.404,58.936z"
-				></path>
+			></path>
 			</svg>
 			<p>Google</p>
 		</a>
 	</button>
-	<!-- <button type="button" class="btn github" on:click={() => alert('GitHub auth')}>
-		<svg
-			height="20"
-			width="20"
-			viewBox="0 0 16 16"
-			fill="currentColor"
-			xmlns="http://www.w3.org/2000/svg"
-		>
-			<path
-				d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2 .37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"
-			/>
-		</svg>
-		GitHub
-	</button> -->
 </form>
 
 <style>
@@ -233,6 +243,10 @@
 		background-color: #2b2b2b;
 	}
 
+	.password-container {
+		position: relative;
+	}
+
 	.input {
 		margin-left: 10px;
 		border-radius: 10px;
@@ -243,8 +257,31 @@
 		color: #f1f1f1;
 	}
 
+	.password-input {
+		padding-right: 40px;
+	}
+
 	.input:focus {
 		outline: none;
+	}
+
+	.password-toggle {
+		position: absolute;
+		right: 10px;
+		top: 50%;
+		transform: translateY(-50%);
+		background: none;
+		border: none;
+		color: rgba(241, 241, 241, 0.6);
+		cursor: pointer;
+		transition: color 0.2s ease;
+		display: flex;
+		align-items: center;
+		padding: 0;
+	}
+
+	.password-toggle:hover {
+		color: rgba(241, 241, 241, 0.9);
 	}
 
 	.forgot-container {
@@ -336,4 +373,4 @@
 	.btn.github:hover {
 		border: 1px solid #2d79f3;
 	}
-</style>
+	</style>

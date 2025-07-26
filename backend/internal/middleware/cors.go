@@ -1,19 +1,23 @@
 package middleware
 
 import (
+	"log"
 	"net/http"
 )
 
 // allowedOrigins is your “allow list” of dev domains.
 var allowedOrigins = map[string]bool{
-	"http://localhost:5173": true,
-	"http://127.0.0.1:5173": true,
+	"http://localhost:5173":             true,
+	"http://localhost:3000":             true,
+	"http://localhost:4353":             true,
+	"https://books.saurabpoudel.com.np": true,
 }
 
 // CORS wraps your handler and enforces origin checks.
 func CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
+		log.Print(origin)
 		if origin == "" {
 			// not a CORS request—proceed
 			next.ServeHTTP(w, r)

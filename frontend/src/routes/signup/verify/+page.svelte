@@ -119,7 +119,7 @@
 	<title>Verify Email - Books</title>
 </svelte:head>
 
-<div class="container justify-center">
+<div class="flex min-h-screen items-center justify-center">
 	<div class="card">
 		<div class="header">
 			<a href="/" class="logo" aria-label="Homepage">
@@ -214,12 +214,7 @@
 </div>
 
 <style>
-	:global(body) {
-		margin: 0;
-		font-family: system-ui, sans-serif;
-		color: white;
-		background: #1a001f;
-	}
+
 
 	.container {
 		display: flex;

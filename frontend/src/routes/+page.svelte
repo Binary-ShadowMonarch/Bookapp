@@ -1,11 +1,18 @@
-
 <script lang="ts">
-
-import { Book, Upload, Search, Bookmark, Sparkles, Play } from 'lucide-svelte';
-import NavBar from '$lib/NavBar.svelte';
-
-	
+	// Imports for this page
+	import { page } from '$app/stores';
+	import NavBar from '$lib/NavBar.svelte';
+	import { Book, Upload, Search, Bookmark, Play } from 'lucide-svelte';
 </script>
+
+<svelte:head>
+	<title>Books | Your Digital Library for Reading and Organizing</title>
+	<meta
+		name="description"
+		content="Discover, read, and organize your favorite books with our beautiful reading experience. Upload your own collection or explore thousands of free titles."
+	/>
+	<link rel="canonical" href={$page.url.href} />
+	</svelte:head>
 
 
 <!-- Homepage -->

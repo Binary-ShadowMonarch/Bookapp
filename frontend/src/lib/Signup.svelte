@@ -147,11 +147,7 @@
 					Already have an account? <a href="/login">Sign in</a> or
 				</p>
 				<button type="button" class="btn google">
-					<a
-						class="flex gap-2"
-						aria-label="GoogleAuth"
-						href="http://localhost:8080/auth/google/login"
-					>
+					<a class="flex gap-2" aria-label="GoogleAuth" href="/api/auth/google/login">
 						<svg
 							version="1.1"
 							width="20"
@@ -374,7 +370,9 @@
 
 	.footer {
 		text-align: center;
-		padding-top: 1rem;
+		padding-top: 0rem;
+		padding:0.5rem;
+		margin-bottom:0.5rem;
 		border-top: 1px solid rgba(255, 255, 255, 0.1);
 	}
 
@@ -395,7 +393,8 @@
 		color: #b084ff;
 	}
 	.btn {
-		margin-top: 10px;
+		margin-top: 0px;
+		padding-top: 0px;
 		width: 100%;
 		height: 50px;
 		border-radius: 10px;
@@ -403,7 +402,7 @@
 		justify-content: center;
 		align-items: center;
 		font-weight: 500;
-		gap: 10px;
+		gap: 0px;
 		border: 1px solid #333;
 		background-color: #2b2b2b;
 		color: #f1f1f1;
@@ -411,8 +410,7 @@
 		transition: 0.2s ease-in-out;
 	}
 
-	.btn.google:hover,
-	.btn.github:hover {
+	.btn.google:hover {
 		border: 1px solid #2d79f3;
 	}
 </style>

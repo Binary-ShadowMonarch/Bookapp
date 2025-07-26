@@ -10,37 +10,32 @@ import (
 func NewRouter(svc *auth.Service) http.Handler {
 	mux := http.NewServeMux()
 
-	// Public routes (with CORS)
-	mux.Handle("/signup/request", middleware.CORS(RequestVerifyHandler(svc)))
-	mux.Handle("/signup/verify", middleware.CORS(VerifyHandler(svc)))
-	mux.Handle("/login", middleware.CORS(LoginHandler(svc)))
-	mux.Handle("/refresh", middleware.CORS(RefreshHandler(svc)))
-	mux.Handle("/logout", middleware.CORS(LogoutHandler(svc)))
+	// Prefix all routes with /api
+	api := http.NewServeMux()
 
-	// This route starts the Google sign-in process.
-	mux.Handle("/auth/google/login", middleware.CORS(GoogleLoginHandler(svc)))
-	// This is the callback URL that you configured in your Google Cloud Console.
-	mux.Handle("/auth/google/callback", middleware.CORS(GoogleCallbackHandler(svc)))
+	api.Handle("/register/request", middleware.CORS(RequestVerifyHandler(svc)))
+	api.Handle("/register/verify", middleware.CORS(VerifyHandler(svc)))
+	api.Handle("/login", middleware.CORS(LoginHandler(svc)))
+	api.Handle("/refresh", middleware.CORS(RefreshHandler(svc)))
+	api.Handle("/logout", middleware.CORS(LogoutHandler(svc)))
+	api.Handle("/auth/google/login", middleware.CORS(GoogleLoginHandler(svc)))
+	api.Handle("/auth/google/callback", middleware.CORS(GoogleCallbackHandler(svc)))
 
-	// Protected routes under /protected prefix
+	// Protected routes
 	protectedMux := http.NewServeMux()
-
-	// Library routes
 	protectedMux.Handle("/library", LibraryHandler(svc))
-	protectedMux.Handle("/library/", LibraryHandler(svc)) // handles /library/* paths
+	protectedMux.Handle("/library/", LibraryHandler(svc))
 
 	// Upload routes
 	protectedMux.Handle("/upload", UploadHandler(svc))
 
-	// File management routes
-	protectedMux.Handle("/files", ListFilesHandler(svc))
-	protectedMux.Handle("/files/", FileHandler(svc)) // handles /files/{id} operations
+	// File proxy route - serves actual file content
+	protectedMux.Handle("/files/", FileProxyHandler(svc))
 
 	// User profile routes
 	protectedMux.Handle("/profile", ProfileHandler(svc))
 
-	// Wrap all protected routes with middleware
-	mux.Handle("/protected/",
+	api.Handle("/protected/",
 		middleware.CORS(
 			middleware.JWTMiddleware(svc,
 				http.StripPrefix("/protected", protectedMux),
@@ -48,5 +43,7 @@ func NewRouter(svc *auth.Service) http.Handler {
 		),
 	)
 
+	// Main router now uses the /api prefix
+	mux.Handle("/api/", http.StripPrefix("/api", api))
 	return mux
 }

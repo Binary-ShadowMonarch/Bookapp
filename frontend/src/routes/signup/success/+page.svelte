@@ -3,8 +3,7 @@
   import { Book, CheckCircle } from 'lucide-svelte';
 </script>
 
-<div class="container">
-  <div class="card">
+<div class="flex container min-h-screen items-center justify-center">  <div class="card">
     <div class="header">
       <a href="/" class="logo" aria-label="Homepage">
         <div class="logo-icon">

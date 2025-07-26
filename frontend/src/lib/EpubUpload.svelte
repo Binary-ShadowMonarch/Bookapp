@@ -73,7 +73,7 @@
 	// On mount: load existing EPUBs
 	onMount(async () => {
 		try {
-			const res = await fetch('http://localhost:8080/protected/library', {
+			const res = await fetch('/api/protected/library', {
 				credentials: 'include'
 			});
 			if (!res.ok) return;
@@ -127,7 +127,7 @@
 			const form = new FormData();
 			form.append('file', file);
 
-			const uploadRes = await fetch('http://localhost:8080/protected/upload', {
+			const uploadRes = await fetch('/api/protected/upload', {
 				method: 'POST',
 				credentials: 'include',
 				body: form

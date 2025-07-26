@@ -23,7 +23,7 @@ type Claims struct {
 }
 
 func getJwtSecret() []byte {
-	secret := os.Getenv("AUTH_JWT_SECRET")
+	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
 		log.Fatal("AUTH_JWT_SECRET is not set")
 	}
