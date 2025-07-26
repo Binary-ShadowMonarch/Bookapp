@@ -21,12 +21,13 @@
 	let currentChapterLabel = $state('Reading...');
 	let progress = $state(0);
 
-	let darkMode = $state(false);
+	let darkMode = $state(true); // Default to dark mode
 	let showChapterList = $state(false);
 	let showSettings = $state(false);
 
 	let readerContainer: HTMLElement; // The single container for epub.js
 	let loadMoreSentinel: HTMLElement; // The trigger to load the next chapter
+	let settingsDropdown: HTMLElement; // Reference to settings dropdown
 
 	let intersectionObserver: IntersectionObserver;
 	let saveProgressTimeout: NodeJS.Timeout;
@@ -34,6 +35,10 @@
 	// --- LIFECYCLE & INITIALIZATION ---
 	onMount(async () => {
 		document.body.style.overflow = 'hidden';
+		
+		// Add click outside listener for settings
+		document.addEventListener('click', handleClickOutside);
+		
 		try {
 			const ePub = (await import('epubjs')).default;
 			const bookData = await loadBookData();
@@ -73,6 +78,7 @@
 
 	onDestroy(() => {
 		document.body.style.overflow = 'auto';
+		document.removeEventListener('click', handleClickOutside);
 		clearTimeout(saveProgressTimeout);
 		intersectionObserver?.disconnect();
 		book?.destroy();
@@ -167,6 +173,12 @@
 		rendition?.themes.override('color', theme['color']);
 		rendition?.themes.override('background-color', theme['background-color']);
 	}
+
+	function handleClickOutside(event: MouseEvent) {
+		if (showSettings && settingsDropdown && !settingsDropdown.contains(event.target as Node)) {
+			showSettings = false;
+		}
+	}
 </script>
 
 <svelte:window on:keydown={(e) => e.key === 'Escape' && onClose()} />
@@ -195,7 +207,7 @@
 				aria-label="Table of contents"
 				><List class="h-5 w-5 text-gray-600 dark:text-gray-300" /></button
 			>
-			<div class="relative">
+			<div class="relative" bind:this={settingsDropdown}>
 				<button
 					onclick={() => (showSettings = !showSettings)}
 					class="rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -204,16 +216,23 @@
 				>
 				{#if showSettings}
 					<div
-						class="absolute right-0 z-10 mt-2 w-48 rounded-lg border bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
+						class="absolute right-0 z-10 mt-2 w-56 rounded-lg border bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
 					>
-						<button
-							onclick={() => {
-								toggleDarkMode();
-								showSettings = false;
-							}}
-							class="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
-							>{darkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}</button
-						>
+						<div class="flex items-center justify-between px-4 py-3">
+							<span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+								{darkMode ? 'Dark Mode' : 'Light Mode'}
+							</span>
+							<button
+								onclick={toggleDarkMode}
+								class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 {darkMode ? 'bg-blue-600' : 'bg-gray-200'}"
+								role="switch"
+								aria-checked={darkMode}
+							>
+								<span
+									class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform {darkMode ? 'translate-x-6' : 'translate-x-1'}"
+								></span>
+							</button>
+						</div>
 					</div>
 				{/if}
 			</div>

@@ -5,7 +5,9 @@
 	// import { redirect } from '@sveltejs/kit';
 </script>
 
-1
+1<svelte:head>
+	<title>Login - Books</title>
+</svelte:head>
 
 <div class=" relative flex min-h-screen items-center justify-center">
 	<LoginForm />

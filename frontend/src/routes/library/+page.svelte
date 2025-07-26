@@ -204,6 +204,13 @@
 	);
 </script>
 
+<svelte:head>
+	<title>Books | Library</title>
+	<meta
+		name="description"
+		content="Discover, read, and organize your favorite books with our beautiful reading experience. Upload your own collection or explore thousands of free titles."
+	/>
+	</svelte:head>
 {#if showReader}
 	<BookReader
 		bookId={currentBookId}
