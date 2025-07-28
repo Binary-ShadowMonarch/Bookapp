@@ -22,6 +22,7 @@
 		}
 		// 2) if unauthorized, try a refresh and retry
 		if (res.status === 401) {
+			// const refresh = await fetch('/api/refresh', {
 			const refresh = await fetch('/api/refresh', {
 				method: 'POST',
 				credentials: 'include'
@@ -71,7 +72,7 @@
 					const json = await res.json();
 					if (json.message) message = json.message;
 				} else {
-					message = await res.text();
+					message = (await res.text()).trim();
 				}
 				throw new Error(message);
 			}
@@ -81,7 +82,16 @@
 			console.log('Logged in successfully!');
 			goto('/library');
 		} catch (err: any) {
-			error = 'Unexpected error occurred please try again later';
+			// ✅ Compare the error's message property
+			if (err.message === 'invalid credentials') {
+				error = err.message.toUpperCase(); // ✅ Call toUpperCase() as a method
+			} else if (err.message === 'user not found') {
+				error = err.message.toUpperCase();
+			} else {
+				//  could display the actual error for debugging if you want (careful of nginx errors that are half a page)
+				// error = err.message;
+				error = 'Unexpected error occurred. Please try again later.';
+			}
 		}
 	}
 </script>

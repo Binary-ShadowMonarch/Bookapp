@@ -1,3 +1,4 @@
+<!-- src/lib/BookReader.svelte -->
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { X, List, Settings } from 'lucide-svelte';
@@ -35,10 +36,10 @@
 	// --- LIFECYCLE & INITIALIZATION ---
 	onMount(async () => {
 		document.body.style.overflow = 'hidden';
-		
+
 		// Add click outside listener for settings
 		document.addEventListener('click', handleClickOutside);
-		
+
 		try {
 			const ePub = (await import('epubjs')).default;
 			const bookData = await loadBookData();
@@ -170,8 +171,28 @@
 		const theme = darkMode
 			? { 'background-color': '#1f2937', color: '#f9fafb' }
 			: { 'background-color': '#ffffff', color: '#111827' };
+
 		rendition?.themes.override('color', theme['color']);
 		rendition?.themes.override('background-color', theme['background-color']);
+
+		// Add link styling
+		if (darkMode) {
+			rendition?.themes.override('a', {
+				color: '#909090 !important',
+				'text-decoration': 'none'
+			});
+			rendition?.themes.override('a:visited', {
+				color: '#808080 !important'
+			});
+		} else {
+			rendition?.themes.override('a', {
+				color: '#2563eb !important', // Standard blue
+				'text-decoration': 'none'
+			});
+			rendition?.themes.override('a:visited', {
+				color: '#7c3aed !important' // Standard purple for visited
+			});
+		}
 	}
 
 	function handleClickOutside(event: MouseEvent) {
@@ -223,13 +244,18 @@
 								{darkMode ? 'Dark Mode' : 'Light Mode'}
 							</span>
 							<button
+								aria-label="Dark mode toggle"
 								onclick={toggleDarkMode}
-								class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 {darkMode ? 'bg-blue-600' : 'bg-gray-200'}"
+								class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 {darkMode
+									? 'bg-blue-600'
+									: 'bg-gray-200'}"
 								role="switch"
 								aria-checked={darkMode}
 							>
 								<span
-									class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform {darkMode ? 'translate-x-6' : 'translate-x-1'}"
+									class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform {darkMode
+										? 'translate-x-6'
+										: 'translate-x-1'}"
 								></span>
 							</button>
 						</div>
@@ -288,11 +314,12 @@
 		overflow-y: scroll;
 		-webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
 	}
+
 	/* Hides the default epub.js navigation arrows */
 	:global(.epub-view > iframe) {
 		background-color: transparent !important;
 	}
 	:global(.epub-arrow) {
-		display: none !important;
+		display: none;
 	}
 </style>

@@ -7,7 +7,7 @@
 	<title>Congrats! - Use Books Now!</title>
 </svelte:head>
 
-<div class="container flex min-h-screen items-center justify-center">
+<div class="container min-h-screen items-center justify-center">
 	<div class="card">
 		<div class="header">
 			<a href="/" class="logo" aria-label="Homepage">

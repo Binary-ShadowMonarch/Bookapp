@@ -7,7 +7,7 @@
 	import { epubParser } from '$lib/epub-parser-pool';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { LogOut, Settings, HelpCircle, User2 } from 'lucide-svelte';
+	import { LogOut, Settings, HelpCircle, User, Store } from 'lucide-svelte';
 
 	let { data }: { data: { user: { email: string } } } = $props();
 
@@ -69,7 +69,26 @@
 
 	async function parseEpubMetadata(file: File) {
 		try {
-			return await epubParser.parseEpub(file);
+			const result = await epubParser.parseEpub(file);
+
+			// If coverUrl is a blob URL, convert it to data URL
+			if (result.coverUrl && result.coverUrl.startsWith('blob:')) {
+				try {
+					const response = await fetch(result.coverUrl);
+					const blob = await response.blob();
+					const dataUrl = await new Promise<string>((resolve) => {
+						const reader = new FileReader();
+						reader.onload = () => resolve(reader.result as string);
+						reader.readAsDataURL(blob);
+					});
+					result.coverUrl = dataUrl;
+				} catch (error) {
+					console.error('Failed to convert blob URL to data URL:', error);
+					result.coverUrl = null;
+				}
+			}
+
+			return result;
 		} catch (error) {
 			console.error('Failed to parse EPUB:', error);
 			return {
@@ -210,7 +229,7 @@
 		name="description"
 		content="Discover, read, and organize your favorite books with our beautiful reading experience. Upload your own collection or explore thousands of free titles."
 	/>
-	</svelte:head>
+</svelte:head>
 {#if showReader}
 	<BookReader
 		bookId={currentBookId}
@@ -226,28 +245,14 @@
 	<div slot="right-buttons" class="flex justify-center gap-4 sm:flex-row">
 		<button
 			aria-label="Store"
-			class="flex cursor-pointer items-center gap-2 rounded-full bg-indigo-500 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-			><svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="20"
-				height="20"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
-				class="h-5 w-5"
-				><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><path d="M3 6h18" /><path
-					d="M16 10a4 4 0 0 1-8 0"
-				/></svg
-			><span class="hidden sm:inline">Store</span></button
+			class="ml-2 flex cursor-pointer items-center gap-2 rounded-full bg-indigo-500 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+			><Store /><span class="hidden sm:inline">Store</span></button
 		><EpubUpload onBookAdded={handleBookAdded} />
 		<div class="relative">
 			<button
 				onclick={() => (showMenu = !showMenu)}
 				class="rounded-full p-2 transition hover:bg-gray-200 dark:hover:bg-gray-700"
-				aria-label="User menu"><User2 class="h-6 w-6 text-gray-800 dark:text-white" /></button
+				aria-label="User menu"><User class="h-6 w-6 text-gray-800 dark:text-white" /></button
 			>{#if showMenu}<div
 					class="absolute right-0 z-50 mt-2 w-48 rounded-lg bg-white text-sm shadow-lg dark:bg-gray-800"
 				>

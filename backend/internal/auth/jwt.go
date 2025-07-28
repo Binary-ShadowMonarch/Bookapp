@@ -48,7 +48,7 @@ func CreateToken(email string, ttl time.Duration) (string, error) {
 // ParseToken remains the same, it just verifies any token.
 func ParseToken(tokenStr string) (*Claims, error) {
 
-	log.Printf("env : %s", getJwtSecret())
+	// log.Printf("env : %s", getJwtSecret())
 	tok, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		return getJwtSecret(), nil
 	})

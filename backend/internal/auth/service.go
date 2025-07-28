@@ -39,7 +39,7 @@ var ErrInvalidCredentials = errors.New("invalid credentials")
 var ErrUnauthorized = errors.New("unauthorized")
 
 var ErrEmailExistsLocal = errors.New("an account with this email already exists with a password, please log in with your password")
-var ErrUserNotFound = errors.New("internal db server error")
+var ErrUserNotFound = errors.New("user not found")
 
 // UserStore defines the methods we need for your store.
 type UserStore interface {
@@ -592,16 +592,29 @@ func (s *Service) issueAndSaveTokens(u *models.User) (accessToken, refreshToken 
 	return accessToken, refreshToken, nil
 }
 
-// Modify your Login function to use the new helper
 func (s *Service) Login(mail, password string) (accessToken, refreshToken string, err error) {
 	u, err := s.store.FindByEmail(mail)
-	if u.Provider != "local" {
-		return "", "", fmt.Errorf("ACCOUNT ASSOCIATED WITH THIS EMAIL EXISTS SIGN IN USING %s", strings.ToUpper(u.Provider))
-	}
-	if err != nil || !CheckPassword(u.HashedPassword, password) {
+
+	// 1. ✅ Check for an error FIRST. This handles the "user not found" case.
+	// If err is not nil (e.g., user not found), the login fails immediately.
+	if err != nil {
+		if err == store.ErrUserNotFound {
+			return "", "", ErrUserNotFound
+		}
 		return "", "", ErrInvalidCredentials
 	}
 
+	// 2. Now that we know 'u' is not nil, we can safely check its properties.
+	if u.Provider != "local" {
+		return "", "", fmt.Errorf("ACCOUNT ASSOCIATED WITH THIS EMAIL EXISTS SIGN IN USING %s", strings.ToUpper(u.Provider))
+	}
+
+	// 3. Finally, check if the password is correct.
+	if !CheckPassword(u.HashedPassword, password) {
+		return "", "", ErrInvalidCredentials
+	}
+
+	// If all checks pass, issue the tokens.
 	return s.issueAndSaveTokens(u)
 }
 

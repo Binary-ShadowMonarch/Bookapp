@@ -1,7 +1,7 @@
 <!-- src/lib/EpubUpload.svelte -->
 <script lang="ts">
 	import { onMount } from 'svelte';
-
+	import { Upload } from 'lucide-svelte';
 	export type BookStatus = 'read' | 'unread' | 'finished';
 	export interface Book {
 		id: string;
@@ -54,9 +54,20 @@
 						author: book.packaging.metadata.creator || 'Unknown Author',
 						coverUrl: null as string | null
 					};
+
 					try {
 						const cover = await book.coverUrl();
-						if (cover) meta.coverUrl = cover;
+						if (cover) {
+							// Convert blob URL to data URL to avoid CSP issues
+							const response = await fetch(cover);
+							const blob = await response.blob();
+							const dataUrl = await new Promise<string>((resolve) => {
+								const reader = new FileReader();
+								reader.onload = () => resolve(reader.result as string);
+								reader.readAsDataURL(blob);
+							});
+							meta.coverUrl = dataUrl;
+						}
 					} catch {
 						// no cover
 					}
@@ -168,11 +179,11 @@
 <button
 	onclick={triggerFileSelect}
 	disabled={isUploading}
-	class="flex items-center gap-2 rounded-full bg-green-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-600 disabled:opacity-50"
+	class="flex cursor-pointer items-center gap-2 rounded-full bg-green-500 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-green-600 disabled:opacity-50"
 >
 	{#if isUploading}
-		Uploading…
+		<Upload /><span class="hidden sm:inline">Uploading</span>
 	{:else}
-		Upload EPUB
+		<Upload /><span class="hidden sm:inline">Upload</span>
 	{/if}
 </button>
