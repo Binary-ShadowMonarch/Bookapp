@@ -48,6 +48,8 @@
 	"pnpm": {
 		"onlyBuiltDependencies": [
 			"@tailwindcss/oxide",
+			"core-js",
+			"es5-ext",
 			"esbuild"
 		]
 	},

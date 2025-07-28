@@ -5,7 +5,7 @@
 	// import { redirect } from '@sveltejs/kit';
 </script>
 
-1<svelte:head>
+<svelte:head>
 	<title>Login - Books</title>
 </svelte:head>
 

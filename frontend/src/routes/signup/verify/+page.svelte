@@ -119,7 +119,7 @@
 	<title>Verify Email - Books</title>
 </svelte:head>
 
-<div class="flex min-h-screen items-center justify-center">
+<div class="container flex min-h-screen items-center justify-center">
 	<div class="card">
 		<div class="header">
 			<a href="/" class="logo" aria-label="Homepage">
@@ -214,8 +214,6 @@
 </div>
 
 <style>
-
-
 	.container {
 		display: flex;
 		justify-content: center;

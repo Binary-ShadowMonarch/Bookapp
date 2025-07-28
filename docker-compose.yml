@@ -29,8 +29,8 @@ services:
       - PORT=3000
       # Your SvelteKit app can use this to know where the API is
       - PUBLIC_API_URL=/api
-      - ORIGIN=https://books.saurabpoudel.com.np
-      # - ORIGIN=localhost:4353
+      # - ORIGIN=https://books.saurabpoudel.com.np
+      - ORIGIN=http://localhost:4353
 
     depends_on:
       - backend
