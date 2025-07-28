@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # Nginx Reverse Proxy - The single entry point for your app
   nginx:

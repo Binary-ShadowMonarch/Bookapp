@@ -14,5 +14,7 @@ node_modules/
 /dist/
 /.svelte-kit
 
+# sql dev backups
+/backups/
 # OS-generated 
 .DS_Store
