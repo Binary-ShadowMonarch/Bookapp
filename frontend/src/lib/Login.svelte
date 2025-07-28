@@ -227,6 +227,7 @@
 
 <style>
 	.form {
+		max-width: 460px;
 		display: flex;
 		flex-direction: column;
 		gap: 0.4rem;

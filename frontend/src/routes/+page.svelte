@@ -18,10 +18,10 @@
 <NavBar>
 	<div slot="name">Books</div>
 	<div slot="right-buttons" class="flex justify-center gap-4 sm:flex-row">
-		<a href="/login">
+		<a class="w-20" href="/login">
 			<button
 				aria-label="Login"
-				class="flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-gray-600 dark:hover:bg-gray-800"
+				class="flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-gray-600 dark:hover:bg-gray-800"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -42,10 +42,10 @@
 				<span class="sm:inline">Login</span>
 			</button>
 		</a>
-		<a href="/signup">
+		<a class="w-30" href="/signup">
 			<button
 				aria-label="Sign Up"
-				class="flex items-center gap-2 rounded-full bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+				class="flex cursor-pointer items-center gap-2 rounded-full bg-blue-500 px-3 py-1.5 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-gray-600 dark:hover:bg-blue-600"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
