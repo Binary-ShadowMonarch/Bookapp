@@ -16,5 +16,7 @@ node_modules/
 
 # sql dev backups
 /backups/
+/backups/*
+
 # OS-generated 
 .DS_Store
