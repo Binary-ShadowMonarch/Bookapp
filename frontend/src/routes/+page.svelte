@@ -45,7 +45,7 @@
 		<a class="w-30" href="/signup">
 			<button
 				aria-label="Sign Up"
-				class="flex cursor-pointer items-center gap-2 rounded-full bg-blue-500 px-3 py-1.5 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-gray-600 dark:hover:bg-blue-600"
+				class="flex cursor-pointer items-center gap-2 rounded-full bg-blue-500 bg-gradient-to-r from-blue-500 to-purple-600 px-3 py-1.5 text-sm font-semibold text-white hover:from-blue-600 hover:to-purple-700"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"

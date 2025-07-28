@@ -87,6 +87,8 @@
 				error = err.message.toUpperCase(); // ✅ Call toUpperCase() as a method
 			} else if (err.message === 'user not found') {
 				error = err.message.toUpperCase();
+			} else if (err.message === 'ACCOUNT ASSOCIATED WITH THIS EMAIL EXISTS SIGN IN USING GOOGLE') {
+				error = err.message.toUpperCase();
 			} else {
 				//  could display the actual error for debugging if you want (careful of nginx errors that are half a page)
 				// error = err.message;
@@ -227,7 +229,7 @@
 
 <style>
 	.form {
-		max-width: 460px;
+		max-width: 430px;
 		display: flex;
 		flex-direction: column;
 		gap: 0.4rem;
