@@ -27,8 +27,6 @@
 	let showChapterList = $state(false);
 	let showSettings = $state(false);
 
-	// Enhanced navigation state
-	let isNavigating = $state(false);
 	let isLoadingPrevious = $state(false);
 	let isLoadingNext = $state(false);
 	let navigationLock = $state(false);
@@ -78,8 +76,8 @@
 				height: '100%'
 			});
 
-			rendition.themes.register(themes);
-			updateTheme();
+			// ✅ All theme calls are removed from onMount.
+			// The 'rendered' event handler will now manage all styling.
 
 			await rendition.display(progressData.location || undefined);
 			await book.ready;
@@ -139,7 +137,12 @@
 			saveProgress();
 		});
 
+		// ✅ This is the key: The 'rendered' event fires for the first page and all subsequent pages.
 		rendition.on('rendered', () => {
+			// Apply the current theme every time a new section is drawn.
+			updateTheme();
+
+			// Place sentinels for infinite scroll
 			const view = rendition.manager.container;
 			if (view) {
 				view.prepend(loadPreviousSentinel);
@@ -149,13 +152,13 @@
 	}
 
 	function setupIntersectionObservers() {
-		// Observer for loading PREVIOUS chapters
 		topObserver = new IntersectionObserver(
 			async ([entry]) => {
 				if (
 					!entry.isIntersecting ||
 					navigationLock ||
 					isLoadingPrevious ||
+					!rendition.location ||
 					rendition.location.start.index <= 0
 				) {
 					return;
@@ -164,17 +167,12 @@
 				try {
 					navigationLock = true;
 					isLoadingPrevious = true;
-
-					// Add debounce to prevent rapid firing
 					clearTimeout(navigationTimeout);
 					navigationTimeout = setTimeout(async () => {
 						try {
 							const oldScrollHeight = readerContainer.scrollHeight;
 							const oldScrollTop = readerContainer.scrollTop;
-
 							await rendition.prev();
-
-							// Maintain scroll position
 							requestAnimationFrame(() => {
 								const newScrollHeight = readerContainer.scrollHeight;
 								const heightDiff = newScrollHeight - oldScrollHeight;
@@ -186,7 +184,6 @@
 							console.error('Error loading previous section:', e);
 						} finally {
 							isLoadingPrevious = false;
-							// Release lock after a short delay to prevent immediate re-triggering
 							setTimeout(() => {
 								navigationLock = false;
 							}, 300);
@@ -198,24 +195,15 @@
 					navigationLock = false;
 				}
 			},
-			{
-				root: readerContainer,
-				rootMargin: '50px 0px 0px 0px' // Trigger slightly before reaching the edge
-			}
+			{ root: readerContainer, rootMargin: '50px 0px 0px 0px' }
 		);
 
-		// Observer for loading NEXT chapters
 		bottomObserver = new IntersectionObserver(
 			async ([entry]) => {
-				if (!entry.isIntersecting || navigationLock || isLoadingNext) {
-					return;
-				}
-
+				if (!entry.isIntersecting || navigationLock || isLoadingNext) return;
 				try {
 					navigationLock = true;
 					isLoadingNext = true;
-
-					// Add debounce
 					clearTimeout(navigationTimeout);
 					navigationTimeout = setTimeout(async () => {
 						try {
@@ -224,7 +212,6 @@
 							console.error('Error loading next section:', e);
 						} finally {
 							isLoadingNext = false;
-							// Release lock after a short delay
 							setTimeout(() => {
 								navigationLock = false;
 							}, 300);
@@ -236,10 +223,7 @@
 					navigationLock = false;
 				}
 			},
-			{
-				root: readerContainer,
-				rootMargin: '0px 0px 50px 0px' // Trigger slightly before reaching the edge
-			}
+			{ root: readerContainer, rootMargin: '0px 0px 50px 0px' }
 		);
 
 		topObserver.observe(loadPreviousSentinel);
@@ -268,15 +252,27 @@
 		}, 500);
 	}
 
+	// --- THEME FUNCTIONS ---
 	function toggleDarkMode() {
 		darkMode = !darkMode;
 		updateTheme();
 	}
 
 	function updateTheme() {
-		const themeName = darkMode ? 'dark' : 'light';
-		rendition?.themes.select(themeName);
+		if (!rendition) return;
+		const theme = darkMode ? themes.dark : themes.light;
+
+		// This robustly gets all rendered content sections and applies the theme.
+		const contents = rendition.getContents();
+		contents.forEach((content: any) => {
+			content.addStylesheetRules({
+				body: theme.body,
+				a: theme.a,
+				'a:hover': theme['a:hover']
+			});
+		});
 	}
+	// -----------------------
 
 	function handleClickOutside(event: MouseEvent) {
 		if (showSettings && settingsDropdown && !settingsDropdown.contains(event.target as Node)) {
