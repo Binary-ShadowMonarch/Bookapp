@@ -7,9 +7,20 @@ const config = {
 	kit: {
 		adapter: adapter(),
 		csp: {
+			mode: 'nonce', // Use nonces for both scripts and styles
 			directives: {
-				'script-src': ['self'],
-				'img-src': ['self', 'data:', 'https:', 'blob:'], // Added blob: support
+				'default-src': ['self'],
+				'script-src': ['self'], // SvelteKit will automatically add nonces
+				'style-src': ['self', 'unsafe-inline'], // unsafe-inline needed for Svelte transitions
+				'img-src': ['self', 'data:', 'https:', 'blob:'], // Added blob: for EPUB covers
+				'font-src': ['self', 'data:', 'blob:'], // Added blob: for EPUB fonts
+				'connect-src': ['self', 'blob:'], // Added blob: for EPUB resources
+				'media-src': ['self', 'blob:'], // Added blob: for EPUB media
+				'object-src': ['none'],
+				'base-uri': ['self'],
+				'frame-ancestors': ['none'],
+				'form-action': ['self'],
+				'upgrade-insecure-requests': true
 			},
 		}
 	}

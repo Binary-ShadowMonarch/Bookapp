@@ -169,7 +169,7 @@
 
 	function updateTheme() {
 		const theme = darkMode
-			? { 'background-color': '#1f2937', color: '#f9fafb' }
+			? { 'background-color': '#000000', color: '#f9fafb' }
 			: { 'background-color': '#ffffff', color: '#111827' };
 
 		rendition?.themes.override('color', theme['color']);
@@ -186,11 +186,11 @@
 			});
 		} else {
 			rendition?.themes.override('a', {
-				color: '#2563eb !important', // Standard blue
+				color: '#000000 !important', // Standard black
 				'text-decoration': 'none'
 			});
 			rendition?.themes.override('a:visited', {
-				color: '#7c3aed !important' // Standard purple for visited
+				color: '#202020 !important' // Standard for visited
 			});
 		}
 	}

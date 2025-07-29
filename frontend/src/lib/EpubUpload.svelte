@@ -33,6 +33,7 @@
 	let isUploading = $state(false);
 
 	// Parse metadata from an EPUB File object
+	// Improved parseEpubMetadata function that ensures blob URLs are converted
 	async function parseEpubMetadata(file: File): Promise<{
 		id: string;
 		title: string;
@@ -58,21 +59,31 @@
 					try {
 						const cover = await book.coverUrl();
 						if (cover) {
-							// Convert blob URL to data URL to avoid CSP issues
-							const response = await fetch(cover);
-							const blob = await response.blob();
-							const dataUrl = await new Promise<string>((resolve) => {
-								const reader = new FileReader();
-								reader.onload = () => resolve(reader.result as string);
-								reader.readAsDataURL(blob);
-							});
-							meta.coverUrl = dataUrl;
+							// Always convert blob URLs to data URLs to avoid CSP issues
+							if (cover.startsWith('blob:')) {
+								const response = await fetch(cover);
+								const blob = await response.blob();
+								const dataUrl = await new Promise<string>((resolve) => {
+									const fileReader = new FileReader();
+									fileReader.onload = () => resolve(fileReader.result as string);
+									fileReader.readAsDataURL(blob);
+								});
+								meta.coverUrl = dataUrl;
+
+								// Clean up the blob URL
+								URL.revokeObjectURL(cover);
+							} else {
+								meta.coverUrl = cover;
+							}
 						}
-					} catch {
-						// no cover
+					} catch (error) {
+						console.warn('Could not extract book cover:', error);
+						// No cover available, use default
 					}
+
 					resolve(meta);
 				} catch (err) {
+					console.error('Error parsing EPUB metadata:', err);
 					reject(err);
 				}
 			};
@@ -80,7 +91,6 @@
 			reader.readAsArrayBuffer(file);
 		});
 	}
-
 	// On mount: load existing EPUBs
 	onMount(async () => {
 		try {
