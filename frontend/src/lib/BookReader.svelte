@@ -4,6 +4,7 @@
 	import { X, List, Settings, Loader2 } from 'lucide-svelte';
 	import { fly } from 'svelte/transition';
 
+	// --- PROPS & INTERFACES ---
 	interface Props {
 		bookId: string;
 		fileUrl?: string;
@@ -26,7 +27,8 @@
 	let showChapterList = $state(false);
 	let showSettings = $state(false);
 
-	// Navigation state
+	// Enhanced navigation state
+	let isNavigating = $state(false);
 	let isLoadingPrevious = $state(false);
 	let isLoadingNext = $state(false);
 	let navigationLock = $state(false);
@@ -37,13 +39,13 @@
 	let loadPreviousSentinel: HTMLElement;
 	let loadMoreSentinel: HTMLElement;
 
-	// --- OBSERVERS & TIMERS ---
-	let topObserver: IntersectionObserver | null = null;
-	let bottomObserver: IntersectionObserver | null = null;
-	let saveProgressTimeout: NodeJS.Timeout | null = null;
-	let navigationTimeout: NodeJS.Timeout | null = null;
+	// --- ASYNC & OBSERVERS ---
+	let topObserver: IntersectionObserver;
+	let bottomObserver: IntersectionObserver;
+	let saveProgressTimeout: NodeJS.Timeout;
+	let navigationTimeout: NodeJS.Timeout;
 
-	// --- THEMES ---
+	// --- THEME DEFINITIONS ---
 	const themes = {
 		light: {
 			body: { 'background-color': '#ffffff', color: '#111827' },
@@ -57,7 +59,7 @@
 		}
 	};
 
-	// --- LIFECYCLE ---
+	// --- LIFECYCLE & INITIALIZATION ---
 	onMount(async () => {
 		document.body.style.overflow = 'hidden';
 		document.addEventListener('click', handleClickOutside);
@@ -68,6 +70,7 @@
 			const progressData = await loadProgress();
 
 			book = ePub(bookData);
+
 			rendition = book.renderTo(readerContainer, {
 				manager: 'continuous',
 				flow: 'scrolled-doc',
@@ -93,31 +96,17 @@
 		}
 	});
 
-	onDestroy(cleanup);
-
-	function cleanup() {
+	onDestroy(() => {
 		document.body.style.overflow = 'auto';
 		document.removeEventListener('click', handleClickOutside);
+		clearTimeout(saveProgressTimeout);
+		clearTimeout(navigationTimeout);
+		topObserver?.disconnect();
+		bottomObserver?.disconnect();
+		book?.destroy();
+	});
 
-		// Clear timeouts
-		if (saveProgressTimeout) clearTimeout(saveProgressTimeout);
-		if (navigationTimeout) clearTimeout(navigationTimeout);
-
-		// Disconnect observers
-		if (topObserver) topObserver.disconnect();
-		if (bottomObserver) bottomObserver.disconnect();
-
-		// Destroy book instance
-		if (book) book.destroy();
-
-		// Reset references
-		book = null;
-		rendition = null;
-		topObserver = null;
-		bottomObserver = null;
-	}
-
-	// --- CORE FUNCTIONS ---
+	// --- CORE LOGIC & EVENT HANDLERS ---
 	async function loadBookData(): Promise<ArrayBuffer> {
 		if (!fileUrl) throw new Error('No book URL provided');
 		const response = await fetch(fileUrl, { credentials: 'include' });
@@ -138,8 +127,6 @@
 	}
 
 	function setupEventHandlers() {
-		if (!rendition) return;
-
 		rendition.on('relocated', (location: any) => {
 			currentLocation = location.start.cfi;
 			if (book.locations.length() > 0) {
@@ -162,113 +149,123 @@
 	}
 
 	function setupIntersectionObservers() {
-		// Cleanup existing observers
-		if (topObserver) topObserver.disconnect();
-		if (bottomObserver) bottomObserver.disconnect();
+		// Observer for loading PREVIOUS chapters
+		topObserver = new IntersectionObserver(
+			async ([entry]) => {
+				if (
+					!entry.isIntersecting ||
+					navigationLock ||
+					isLoadingPrevious ||
+					rendition.location.start.index <= 0
+				) {
+					return;
+				}
 
-		// Observer for previous chapters
-		topObserver = new IntersectionObserver(handleTopIntersection, {
-			root: readerContainer,
-			rootMargin: '50px 0px 0px 0px'
-		});
-
-		// Observer for next chapters
-		bottomObserver = new IntersectionObserver(handleBottomIntersection, {
-			root: readerContainer,
-			rootMargin: '0px 0px 50px 0px'
-		});
-
-		if (loadPreviousSentinel) topObserver.observe(loadPreviousSentinel);
-		if (loadMoreSentinel) bottomObserver.observe(loadMoreSentinel);
-	}
-
-	async function handleTopIntersection([entry]: IntersectionObserverEntry[]) {
-		if (
-			!entry.isIntersecting ||
-			navigationLock ||
-			isLoadingPrevious ||
-			!rendition ||
-			rendition.location.start.index <= 0
-		)
-			return;
-
-		try {
-			navigationLock = true;
-			isLoadingPrevious = true;
-
-			if (navigationTimeout) clearTimeout(navigationTimeout);
-			navigationTimeout = setTimeout(async () => {
 				try {
-					const oldScrollHeight = readerContainer.scrollHeight;
-					const oldScrollTop = readerContainer.scrollTop;
-					await rendition.prev();
+					navigationLock = true;
+					isLoadingPrevious = true;
 
-					requestAnimationFrame(() => {
-						const newScrollHeight = readerContainer.scrollHeight;
-						const heightDiff = newScrollHeight - oldScrollHeight;
-						if (heightDiff > 0) {
-							readerContainer.scrollTop = oldScrollTop + heightDiff;
+					// Add debounce to prevent rapid firing
+					clearTimeout(navigationTimeout);
+					navigationTimeout = setTimeout(async () => {
+						try {
+							const oldScrollHeight = readerContainer.scrollHeight;
+							const oldScrollTop = readerContainer.scrollTop;
+
+							await rendition.prev();
+
+							// Maintain scroll position
+							requestAnimationFrame(() => {
+								const newScrollHeight = readerContainer.scrollHeight;
+								const heightDiff = newScrollHeight - oldScrollHeight;
+								if (heightDiff > 0) {
+									readerContainer.scrollTop = oldScrollTop + heightDiff;
+								}
+							});
+						} catch (e) {
+							console.error('Error loading previous section:', e);
+						} finally {
+							isLoadingPrevious = false;
+							// Release lock after a short delay to prevent immediate re-triggering
+							setTimeout(() => {
+								navigationLock = false;
+							}, 300);
 						}
-					});
-				} finally {
+					}, 100);
+				} catch (e) {
+					console.error('Error in top observer:', e);
 					isLoadingPrevious = false;
-					setTimeout(() => (navigationLock = false), 300);
+					navigationLock = false;
 				}
-			}, 100);
-		} catch (e) {
-			console.error('Error in top observer:', e);
-			isLoadingPrevious = false;
-			navigationLock = false;
-		}
-	}
+			},
+			{
+				root: readerContainer,
+				rootMargin: '50px 0px 0px 0px' // Trigger slightly before reaching the edge
+			}
+		);
 
-	async function handleBottomIntersection([entry]: IntersectionObserverEntry[]) {
-		if (!entry.isIntersecting || navigationLock || isLoadingNext || !rendition) return;
+		// Observer for loading NEXT chapters
+		bottomObserver = new IntersectionObserver(
+			async ([entry]) => {
+				if (!entry.isIntersecting || navigationLock || isLoadingNext) {
+					return;
+				}
 
-		try {
-			navigationLock = true;
-			isLoadingNext = true;
-
-			if (navigationTimeout) clearTimeout(navigationTimeout);
-			navigationTimeout = setTimeout(async () => {
 				try {
-					await rendition.next();
-				} finally {
+					navigationLock = true;
+					isLoadingNext = true;
+
+					// Add debounce
+					clearTimeout(navigationTimeout);
+					navigationTimeout = setTimeout(async () => {
+						try {
+							await rendition.next();
+						} catch (e) {
+							console.error('Error loading next section:', e);
+						} finally {
+							isLoadingNext = false;
+							// Release lock after a short delay
+							setTimeout(() => {
+								navigationLock = false;
+							}, 300);
+						}
+					}, 100);
+				} catch (e) {
+					console.error('Error in bottom observer:', e);
 					isLoadingNext = false;
-					setTimeout(() => (navigationLock = false), 300);
+					navigationLock = false;
 				}
-			}, 100);
-		} catch (e) {
-			console.error('Error in bottom observer:', e);
-			isLoadingNext = false;
-			navigationLock = false;
-		}
+			},
+			{
+				root: readerContainer,
+				rootMargin: '0px 0px 50px 0px' // Trigger slightly before reaching the edge
+			}
+		);
+
+		topObserver.observe(loadPreviousSentinel);
+		bottomObserver.observe(loadMoreSentinel);
 	}
 
 	function saveProgress() {
-		if (saveProgressTimeout) clearTimeout(saveProgressTimeout);
+		clearTimeout(saveProgressTimeout);
 		saveProgressTimeout = setTimeout(() => {
 			fetch('/api/protected/library/progress', {
 				method: 'POST',
 				credentials: 'include',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					bookId,
-					progress: Math.round(progress),
-					location: currentLocation
-				})
+				body: JSON.stringify({ bookId, progress: Math.round(progress), location: currentLocation })
 			});
 			onProgressUpdate(bookId, Math.round(progress), currentLocation);
 		}, 1500);
 	}
 
 	function goToChapter(href: string) {
-		if (!rendition) return;
-
 		navigationLock = true;
 		rendition.display(href);
 		showChapterList = false;
-		setTimeout(() => (navigationLock = false), 500);
+		setTimeout(() => {
+			navigationLock = false;
+		}, 500);
 	}
 
 	function toggleDarkMode() {
@@ -277,8 +274,8 @@
 	}
 
 	function updateTheme() {
-		if (!rendition) return;
-		rendition.themes.select(darkMode ? 'dark' : 'light');
+		const themeName = darkMode ? 'dark' : 'light';
+		rendition?.themes.select(themeName);
 	}
 
 	function handleClickOutside(event: MouseEvent) {

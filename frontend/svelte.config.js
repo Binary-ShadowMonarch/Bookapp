@@ -11,7 +11,7 @@ const config = {
 			directives: {
 				'default-src': ['self'],
 				'script-src': ['self'], // SvelteKit will automatically add nonces
-				'style-src': ['self', 'unsafe-inline'], // unsafe-inline needed for Svelte transitions
+				'style-src': ['self', 'unsafe-inline', 'blob:'], // unsafe-inline needed for Svelte transitions
 				'img-src': ['self', 'data:', 'https:', 'blob:'], // Added blob: for EPUB covers
 				'font-src': ['self', 'data:', 'blob:'], // Added blob: for EPUB fonts
 				'connect-src': ['self', 'blob:'], // Added blob: for EPUB resources
