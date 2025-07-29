@@ -1,6 +1,7 @@
 <!-- src/lib/EpubUpload.svelte -->
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { Upload } from 'lucide-svelte';
 	export type BookStatus = 'read' | 'unread' | 'finished';
 	export interface Book {
@@ -144,6 +145,17 @@
 
 		isUploading = true;
 		try {
+			let resc = await fetch('/api/protected/profile', { method: 'GET', credentials: 'include' });
+			if (resc.status === 401) {
+				const refresh = await fetch('/api/refresh', { method: 'GET', credentials: 'include' });
+				if (refresh.ok) {
+					resc = await fetch('/api/protected/profile', { method: 'GET', credentials: 'include' });
+				}
+				if (!refresh.ok) {
+					goto('/login');
+					return;
+				}
+			}
 			const meta = await parseEpubMetadata(file);
 			const form = new FormData();
 			form.append('file', file);
