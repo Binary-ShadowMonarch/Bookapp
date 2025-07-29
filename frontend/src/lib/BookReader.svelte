@@ -1,9 +1,9 @@
 <!-- src/lib/BookReader.svelte -->
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { X, List, Settings } from 'lucide-svelte';
+	import { X, List, Settings, Loader2 } from 'lucide-svelte';
+	import { fly } from 'svelte/transition';
 
-	// --- PROPS & INTERFACES ---
 	interface Props {
 		bookId: string;
 		fileUrl?: string;
@@ -22,22 +22,44 @@
 	let currentChapterLabel = $state('Reading...');
 	let progress = $state(0);
 
-	let darkMode = $state(true); // Default to dark mode
+	let darkMode = $state(true);
 	let showChapterList = $state(false);
 	let showSettings = $state(false);
 
-	let readerContainer: HTMLElement; // The single container for epub.js
-	let loadMoreSentinel: HTMLElement; // The trigger to load the next chapter
-	let settingsDropdown: HTMLElement; // Reference to settings dropdown
+	// Navigation state
+	let isLoadingPrevious = $state(false);
+	let isLoadingNext = $state(false);
+	let navigationLock = $state(false);
 
-	let intersectionObserver: IntersectionObserver;
-	let saveProgressTimeout: NodeJS.Timeout;
+	// --- DOM BINDINGS ---
+	let readerContainer: HTMLElement;
+	let settingsDropdown: HTMLElement;
+	let loadPreviousSentinel: HTMLElement;
+	let loadMoreSentinel: HTMLElement;
 
-	// --- LIFECYCLE & INITIALIZATION ---
+	// --- OBSERVERS & TIMERS ---
+	let topObserver: IntersectionObserver | null = null;
+	let bottomObserver: IntersectionObserver | null = null;
+	let saveProgressTimeout: NodeJS.Timeout | null = null;
+	let navigationTimeout: NodeJS.Timeout | null = null;
+
+	// --- THEMES ---
+	const themes = {
+		light: {
+			body: { 'background-color': '#ffffff', color: '#111827' },
+			a: { color: '#0000EE !important', 'text-decoration': 'underline' },
+			'a:hover': { color: '#551A8B !important' }
+		},
+		dark: {
+			body: { 'background-color': '#121212', color: '#e0e0e0' },
+			a: { color: '#90cdf4 !important', 'text-decoration': 'underline' },
+			'a:hover': { color: '#bee3f8 !important' }
+		}
+	};
+
+	// --- LIFECYCLE ---
 	onMount(async () => {
 		document.body.style.overflow = 'hidden';
-
-		// Add click outside listener for settings
 		document.addEventListener('click', handleClickOutside);
 
 		try {
@@ -46,8 +68,6 @@
 			const progressData = await loadProgress();
 
 			book = ePub(bookData);
-
-			// Render the book into our single container
 			rendition = book.renderTo(readerContainer, {
 				manager: 'continuous',
 				flow: 'scrolled-doc',
@@ -55,20 +75,16 @@
 				height: '100%'
 			});
 
-			// Set the theme before displaying
+			rendition.themes.register(themes);
 			updateTheme();
 
-			// Display the book, jumping to the last saved location if it exists
 			await rendition.display(progressData.location || undefined);
-
 			await book.ready;
 			chaptersForToc = book.navigation.toc;
-
-			// Generate locations in the background for accurate progress
 			book.locations.generate(1600);
 
 			setupEventHandlers();
-			setupIntersectionObserver();
+			setupIntersectionObservers();
 
 			isLoading = false;
 		} catch (error) {
@@ -77,15 +93,31 @@
 		}
 	});
 
-	onDestroy(() => {
+	onDestroy(cleanup);
+
+	function cleanup() {
 		document.body.style.overflow = 'auto';
 		document.removeEventListener('click', handleClickOutside);
-		clearTimeout(saveProgressTimeout);
-		intersectionObserver?.disconnect();
-		book?.destroy();
-	});
 
-	// --- CORE LOGIC & EVENT HANDLERS ---
+		// Clear timeouts
+		if (saveProgressTimeout) clearTimeout(saveProgressTimeout);
+		if (navigationTimeout) clearTimeout(navigationTimeout);
+
+		// Disconnect observers
+		if (topObserver) topObserver.disconnect();
+		if (bottomObserver) bottomObserver.disconnect();
+
+		// Destroy book instance
+		if (book) book.destroy();
+
+		// Reset references
+		book = null;
+		rendition = null;
+		topObserver = null;
+		bottomObserver = null;
+	}
+
+	// --- CORE FUNCTIONS ---
 	async function loadBookData(): Promise<ArrayBuffer> {
 		if (!fileUrl) throw new Error('No book URL provided');
 		const response = await fetch(fileUrl, { credentials: 'include' });
@@ -106,60 +138,137 @@
 	}
 
 	function setupEventHandlers() {
+		if (!rendition) return;
+
 		rendition.on('relocated', (location: any) => {
 			currentLocation = location.start.cfi;
-
-			// Update progress percentage using epub.js's location generation
 			if (book.locations.length() > 0) {
 				progress = book.locations.percentageFromCfi(currentLocation) * 100;
 			}
-
-			// Update the chapter title in the header
 			const currentChapter = book.navigation.get(location.start.href);
 			if (currentChapter && currentChapter.label) {
 				currentChapterLabel = currentChapter.label;
 			}
-
 			saveProgress();
 		});
 
-		// When a new chapter is added, this event fires
-		rendition.on('rendered', (section: any) => {
-			// Move the sentinel to the end of the new content
-			section.output.append(loadMoreSentinel);
+		rendition.on('rendered', () => {
+			const view = rendition.manager.container;
+			if (view) {
+				view.prepend(loadPreviousSentinel);
+				view.append(loadMoreSentinel);
+			}
 		});
 	}
 
-	function setupIntersectionObserver() {
-		intersectionObserver = new IntersectionObserver(
-			([entry]) => {
-				// When the sentinel is on screen, load the next chapter
-				if (entry.isIntersecting) {
-					rendition.next();
-				}
-			},
-			{ root: readerContainer }
-		);
+	function setupIntersectionObservers() {
+		// Cleanup existing observers
+		if (topObserver) topObserver.disconnect();
+		if (bottomObserver) bottomObserver.disconnect();
 
-		intersectionObserver.observe(loadMoreSentinel);
+		// Observer for previous chapters
+		topObserver = new IntersectionObserver(handleTopIntersection, {
+			root: readerContainer,
+			rootMargin: '50px 0px 0px 0px'
+		});
+
+		// Observer for next chapters
+		bottomObserver = new IntersectionObserver(handleBottomIntersection, {
+			root: readerContainer,
+			rootMargin: '0px 0px 50px 0px'
+		});
+
+		if (loadPreviousSentinel) topObserver.observe(loadPreviousSentinel);
+		if (loadMoreSentinel) bottomObserver.observe(loadMoreSentinel);
+	}
+
+	async function handleTopIntersection([entry]: IntersectionObserverEntry[]) {
+		if (
+			!entry.isIntersecting ||
+			navigationLock ||
+			isLoadingPrevious ||
+			!rendition ||
+			rendition.location.start.index <= 0
+		)
+			return;
+
+		try {
+			navigationLock = true;
+			isLoadingPrevious = true;
+
+			if (navigationTimeout) clearTimeout(navigationTimeout);
+			navigationTimeout = setTimeout(async () => {
+				try {
+					const oldScrollHeight = readerContainer.scrollHeight;
+					const oldScrollTop = readerContainer.scrollTop;
+					await rendition.prev();
+
+					requestAnimationFrame(() => {
+						const newScrollHeight = readerContainer.scrollHeight;
+						const heightDiff = newScrollHeight - oldScrollHeight;
+						if (heightDiff > 0) {
+							readerContainer.scrollTop = oldScrollTop + heightDiff;
+						}
+					});
+				} finally {
+					isLoadingPrevious = false;
+					setTimeout(() => (navigationLock = false), 300);
+				}
+			}, 100);
+		} catch (e) {
+			console.error('Error in top observer:', e);
+			isLoadingPrevious = false;
+			navigationLock = false;
+		}
+	}
+
+	async function handleBottomIntersection([entry]: IntersectionObserverEntry[]) {
+		if (!entry.isIntersecting || navigationLock || isLoadingNext || !rendition) return;
+
+		try {
+			navigationLock = true;
+			isLoadingNext = true;
+
+			if (navigationTimeout) clearTimeout(navigationTimeout);
+			navigationTimeout = setTimeout(async () => {
+				try {
+					await rendition.next();
+				} finally {
+					isLoadingNext = false;
+					setTimeout(() => (navigationLock = false), 300);
+				}
+			}, 100);
+		} catch (e) {
+			console.error('Error in bottom observer:', e);
+			isLoadingNext = false;
+			navigationLock = false;
+		}
 	}
 
 	function saveProgress() {
-		clearTimeout(saveProgressTimeout);
+		if (saveProgressTimeout) clearTimeout(saveProgressTimeout);
 		saveProgressTimeout = setTimeout(() => {
 			fetch('/api/protected/library/progress', {
 				method: 'POST',
 				credentials: 'include',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ bookId, progress: Math.round(progress), location: currentLocation })
+				body: JSON.stringify({
+					bookId,
+					progress: Math.round(progress),
+					location: currentLocation
+				})
 			});
 			onProgressUpdate(bookId, Math.round(progress), currentLocation);
-		}, 1000);
+		}, 1500);
 	}
 
 	function goToChapter(href: string) {
+		if (!rendition) return;
+
+		navigationLock = true;
 		rendition.display(href);
 		showChapterList = false;
+		setTimeout(() => (navigationLock = false), 500);
 	}
 
 	function toggleDarkMode() {
@@ -168,31 +277,8 @@
 	}
 
 	function updateTheme() {
-		const theme = darkMode
-			? { 'background-color': '#000000', color: '#f9fafb' }
-			: { 'background-color': '#ffffff', color: '#111827' };
-
-		rendition?.themes.override('color', theme['color']);
-		rendition?.themes.override('background-color', theme['background-color']);
-
-		// Add link styling
-		if (darkMode) {
-			rendition?.themes.override('a', {
-				color: '#909090 !important',
-				'text-decoration': 'none'
-			});
-			rendition?.themes.override('a:visited', {
-				color: '#808080 !important'
-			});
-		} else {
-			rendition?.themes.override('a', {
-				color: '#000000 !important', // Standard black
-				'text-decoration': 'none'
-			});
-			rendition?.themes.override('a:visited', {
-				color: '#202020 !important' // Standard for visited
-			});
-		}
+		if (!rendition) return;
+		rendition.themes.select(darkMode ? 'dark' : 'light');
 	}
 
 	function handleClickOutside(event: MouseEvent) {
@@ -206,14 +292,16 @@
 
 <div class="fixed inset-0 z-50 flex flex-col bg-white dark:bg-gray-900">
 	<header
-		class="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800"
+		class="flex flex-shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800"
 	>
 		<div class="flex min-w-0 items-center gap-2">
 			<button
 				onclick={onClose}
 				class="flex-shrink-0 rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-gray-700"
-				aria-label="Close reader"><X class="h-5 w-5 text-gray-600 dark:text-gray-300" /></button
+				aria-label="Close reader"
 			>
+				<X class="h-5 w-5 text-gray-600 dark:text-gray-300" />
+			</button>
 			<div class="truncate text-sm text-gray-700 dark:text-gray-200" title={currentChapterLabel}>
 				{currentChapterLabel}
 			</div>
@@ -226,18 +314,21 @@
 				onclick={() => (showChapterList = !showChapterList)}
 				class="rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-gray-700"
 				aria-label="Table of contents"
-				><List class="h-5 w-5 text-gray-600 dark:text-gray-300" /></button
 			>
+				<List class="h-5 w-5 text-gray-600 dark:text-gray-300" />
+			</button>
 			<div class="relative" bind:this={settingsDropdown}>
 				<button
 					onclick={() => (showSettings = !showSettings)}
 					class="rounded-lg p-2 hover:bg-gray-100 dark:hover:bg-gray-700"
 					aria-label="Settings"
-					><Settings class="h-5 w-5 text-gray-600 dark:text-gray-300" /></button
 				>
+					<Settings class="h-5 w-5 text-gray-600 dark:text-gray-300" />
+				</button>
 				{#if showSettings}
 					<div
-						class="absolute right-0 z-10 mt-2 w-56 rounded-lg border bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
+						transition:fly={{ y: -5, duration: 150 }}
+						class="absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-lg border bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
 					>
 						<div class="flex items-center justify-between px-4 py-3">
 							<span class="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -266,20 +357,24 @@
 	</header>
 
 	<div class="h-1 w-full bg-gray-200 dark:bg-gray-700">
-		<div class="h-full bg-blue-500 transition-all" style:width="{progress}%"></div>
+		<div class="h-full bg-blue-500 transition-all duration-500" style:width="{progress}%"></div>
 	</div>
 
 	<div class="relative flex flex-1 overflow-hidden">
 		{#if showChapterList && chaptersForToc.length > 0}
-			<aside class="w-72 flex-shrink-0 border-r bg-white dark:border-gray-700 dark:bg-gray-800">
+			<aside
+				transition:fly={{ x: -20, duration: 200 }}
+				class="w-72 flex-shrink-0 border-r bg-white dark:border-gray-700 dark:bg-gray-800"
+			>
 				<h3 class="p-4 text-lg font-semibold dark:text-white">Table of Contents</h3>
 				<div class="h-[calc(100%-4rem)] overflow-y-auto">
 					{#each chaptersForToc as chapter}
 						<button
 							onclick={() => goToChapter(chapter.href)}
-							class="block w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
-							>{chapter.label}</button
+							class="block w-full px-4 py-2 text-left text-sm transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
 						>
+							{chapter.label.trim()}
+						</button>
 					{/each}
 				</div>
 			</aside>
@@ -297,25 +392,50 @@
 				</div>
 			{/if}
 
+			<!-- Loading indicators for infinite scroll -->
+			{#if isLoadingPrevious}
+				<div class="absolute left-1/2 top-0 z-10 -translate-x-1/2 transform">
+					<div
+						class="flex items-center gap-2 rounded-full bg-black/80 px-3 py-2 text-white backdrop-blur-sm"
+					>
+						<Loader2 class="h-4 w-4 animate-spin" />
+						<span class="text-sm">Loading previous...</span>
+					</div>
+				</div>
+			{/if}
+
+			{#if isLoadingNext}
+				<div class="absolute bottom-0 left-1/2 z-10 -translate-x-1/2 transform">
+					<div
+						class="flex items-center gap-2 rounded-full bg-black/80 px-3 py-2 text-white backdrop-blur-sm"
+					>
+						<Loader2 class="h-4 w-4 animate-spin" />
+						<span class="text-sm">Loading next...</span>
+					</div>
+				</div>
+			{/if}
+
+			<div bind:this={loadPreviousSentinel} class="h-px w-full"></div>
+
 			<div
 				bind:this={readerContainer}
-				class="reader-view h-full w-full"
+				class="reader-view h-full w-full transition-opacity duration-300"
 				style:opacity={isLoading ? 0 : 1}
 			></div>
 
-			<div bind:this={loadMoreSentinel} class="h-px"></div>
+			<div bind:this={loadMoreSentinel} class="h-px w-full"></div>
 		</main>
 	</div>
 </div>
 
 <style>
-	/* Ensures the epub.js container allows scrolling */
 	.reader-view {
 		overflow-y: scroll;
-		-webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+		-webkit-overflow-scrolling: touch;
+		scrollbar-width: thin;
+		scrollbar-color: #a0a0a0 #f0f0f0;
 	}
 
-	/* Hides the default epub.js navigation arrows */
 	:global(.epub-view > iframe) {
 		background-color: transparent !important;
 	}

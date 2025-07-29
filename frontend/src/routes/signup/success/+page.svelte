@@ -7,7 +7,7 @@
 	<title>Congrats! - Use Books Now!</title>
 </svelte:head>
 
-<div class="container min-h-screen items-center justify-center">
+<div class="container flex min-h-screen items-center justify-center">
 	<div class="card">
 		<div class="header">
 			<a href="/" class="logo" aria-label="Homepage">
@@ -41,6 +41,7 @@
 
 <style>
 	.container {
+		justify-content: center;
 		min-height: 100vh;
 		display: flex;
 		align-items: center;
@@ -49,6 +50,7 @@
 	}
 
 	.card {
+		justify-content: center;
 		background: rgba(0, 0, 0, 0.2);
 		border-radius: 16px;
 		padding: 2rem;
