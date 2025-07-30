@@ -145,16 +145,10 @@
 
 		isUploading = true;
 		try {
-			let resc = await fetch('/api/protected/profile', { method: 'GET', credentials: 'include' });
-			if (resc.status === 401) {
-				const refresh = await fetch('/api/refresh', { method: 'GET', credentials: 'include' });
-				if (refresh.ok) {
-					resc = await fetch('/api/protected/profile', { method: 'GET', credentials: 'include' });
-				}
-				if (!refresh.ok) {
-					goto('/login');
-					return;
-				}
+			const resc = await fetch('/api/protected/profile', { method: 'GET', credentials: 'include' });
+			if (!resc.ok) {
+				goto('/login');
+				return;
 			}
 			const meta = await parseEpubMetadata(file);
 			const form = new FormData();
