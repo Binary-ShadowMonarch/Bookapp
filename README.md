@@ -166,4 +166,6 @@ I've found YouTube creators incredibly helpful. Huge thanks to the creators who 
 
 If you're reading this, thanks for checking out my project! Feel free to steal any ideas, but maybe give me credit if you do something cool with them. 😄
 
- 
+## Enjoy some memes
+![Meme 1](./memes/asdf.jpeg "Optional title text on hover")
+![Meme 2](./memes/asdfad.png "Optional title text on hover")
