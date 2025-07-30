@@ -1,49 +1,53 @@
-<!-- src/lib/BookReader.svelte -->
+<!-- this is the book reader component -->
+<!-- it displays EPUB books and handles reading progress -->
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { X, List, Settings, Loader2 } from 'lucide-svelte';
 	import { fly } from 'svelte/transition';
 
-	// --- PROPS & INTERFACES ---
+	// these are the props that get passed in from the parent component
 	interface Props {
-		bookId: string;
-		fileUrl?: string;
-		onClose: () => void;
-		onProgressUpdate: (bookId: string, progress: number, location: string) => void;
+		bookId: string; // unique identifier for the book
+		fileUrl?: string; // URL to the EPUB file
+		onClose: () => void; // callback when reader is closed
+		onProgressUpdate: (bookId: string, progress: number, location: string) => void; // callback to save progress
 	}
 	let { bookId, fileUrl, onClose, onProgressUpdate }: Props = $props();
 
-	// --- STATE ---
-	let book: any;
-	let rendition: any;
-	let chaptersForToc: any[] = $state([]);
+	// main state variables for the reader
+	let book: any; // the EPUB book object
+	let rendition: any; // the rendering engine
+	let chaptersForToc: any[] = $state([]); // table of contents
 
-	let isLoading = $state(true);
-	let currentLocation = $state('');
-	let currentChapterLabel = $state('Reading...');
-	let progress = $state(0);
+	// loading and reading state
+	let isLoading = $state(true); // shows loading spinner
+	let currentLocation = $state(''); // current position in the book
+	let currentChapterLabel = $state('Reading...'); // current chapter name
+	let progress = $state(0); // reading progress percentage
 
-	let darkMode = $state(true);
-	let showChapterList = $state(false);
-	let showSettings = $state(false);
+	// UI state
+	let darkMode = $state(true); // dark/light theme toggle
+	let showChapterList = $state(false); // show/hide table of contents
+	let showSettings = $state(false); // show/hide settings panel
 
-	let isLoadingPrevious = $state(false);
-	let isLoadingNext = $state(false);
-	let navigationLock = $state(false);
+	// navigation state
+	let isLoadingPrevious = $state(false); // loading previous content
+	let isLoadingNext = $state(false); // loading next content
+	let navigationLock = $state(false); // prevents rapid navigation
 
-	// --- DOM BINDINGS ---
-	let readerContainer: HTMLElement;
-	let settingsDropdown: HTMLElement;
-	let loadPreviousSentinel: HTMLElement;
-	let loadMoreSentinel: HTMLElement;
+	// DOM element references
+	let readerContainer: HTMLElement; // main reader container
+	let settingsDropdown: HTMLElement; // settings panel
+	let loadPreviousSentinel: HTMLElement; // trigger for loading previous content
+	let loadMoreSentinel: HTMLElement; // trigger for loading next content
 
-	// --- ASYNC & OBSERVERS ---
-	let topObserver: IntersectionObserver;
-	let bottomObserver: IntersectionObserver;
-	let saveProgressTimeout: NodeJS.Timeout;
-	let navigationTimeout: NodeJS.Timeout;
+	// observers and timeouts for performance
+	let topObserver: IntersectionObserver; // watches for scroll to top
+	let bottomObserver: IntersectionObserver; // watches for scroll to bottom
+	let saveProgressTimeout: NodeJS.Timeout; // debounces progress saves
+	let navigationTimeout: NodeJS.Timeout; // debounces navigation
 
-	// --- THEME DEFINITIONS ---
+	// theme definitions for light and dark mode
 	const themes = {
 		light: {
 			body: { 'background-color': '#ffffff', color: '#111827' },
@@ -57,45 +61,51 @@
 		}
 	};
 
-	// --- LIFECYCLE & INITIALIZATION ---
+	// initialize the book reader when component mounts
 	onMount(async () => {
-		document.body.style.overflow = 'hidden';
+		console.log('DEBUG: BookReader mounting for book:', bookId);
+		document.body.style.overflow = 'hidden'; // prevent background scrolling
 		document.addEventListener('click', handleClickOutside);
 
 		try {
+			// load the EPUB library and book data
 			const ePub = (await import('epubjs')).default;
 			const bookData = await loadBookData();
 			const progressData = await loadProgress();
 
+			// create the book object
 			book = ePub(bookData);
 
+			// set up the rendering engine
 			rendition = book.renderTo(readerContainer, {
-				manager: 'continuous',
-				flow: 'scrolled-doc',
+				manager: 'continuous', // continuous scrolling
+				flow: 'scrolled-doc', // scroll mode instead of pagination
 				width: '100%',
 				height: '100%'
 			});
 
-			// ✅ All theme calls are removed from onMount.
-			// The 'rendered' event handler will now manage all styling.
-
+			// display the book at the saved location or beginning
 			await rendition.display(progressData.location || undefined);
-			await book.ready;
-			chaptersForToc = book.navigation.toc;
-			book.locations.generate(1600);
+			await book.ready; // wait for book to be fully loaded
+			chaptersForToc = book.navigation.toc; // get table of contents
+			book.locations.generate(1600); // generate location markers
 
+			// set up event handlers and observers
 			setupEventHandlers();
 			setupIntersectionObservers();
 
 			isLoading = false;
+			console.log('DEBUG: BookReader initialized successfully');
 		} catch (error) {
-			console.error('Error loading book:', error);
+			console.error('DEBUG: Error loading book:', error);
 			isLoading = false;
 		}
 	});
 
+	// cleanup when component is destroyed
 	onDestroy(() => {
-		document.body.style.overflow = 'auto';
+		console.log('DEBUG: BookReader destroying');
+		document.body.style.overflow = 'auto'; // restore scrolling
 		document.removeEventListener('click', handleClickOutside);
 		clearTimeout(saveProgressTimeout);
 		clearTimeout(navigationTimeout);

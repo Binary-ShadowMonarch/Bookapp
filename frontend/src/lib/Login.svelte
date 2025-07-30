@@ -1,33 +1,40 @@
-<!-- src/lib/Login.svelte -->
+<!-- this is the login page component -->
+<!-- it handles both regular email/password login and Google OAuth -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { Book, Eye, EyeOff, Mail, Lock } from 'lucide-svelte';
 	import { onMount } from 'svelte';
 
+	// form data that gets updated as the user types
 	let email = '';
 	let password = '';
-	let error: string | null = null;
-	let showPassword = false;
-	let isSubmitting = false;
+	let error: string | null = null; // error message to show to the user
+	let showPassword = false; // toggle for showing/hiding password
+	let isSubmitting = false; // prevents double-submission
 
+	// check if the user is already logged in when the page loads
+	// if they are, redirect them to the library
 	async function check() {
+		console.log('DEBUG: Checking if user is already logged in');
 		let res = await fetch('/api/protected/profile', {
 			method: 'GET',
 			credentials: 'include'
 		});
 
 		if (res.ok) {
+			console.log('DEBUG: User is already logged in, redirecting to library');
 			goto('/library');
 			return;
 		}
-		// 2) if unauthorized, try a refresh and retry
+		// if the request failed with 401, try to refresh the token
 		if (res.status === 401) {
-			// const refresh = await fetch('/api/refresh', {
+			console.log('DEBUG: Token expired, attempting refresh');
 			const refresh = await fetch('/api/refresh', {
 				method: 'POST',
 				credentials: 'include'
 			});
 			if (refresh.ok) {
+				console.log('DEBUG: Token refreshed successfully, redirecting to library');
 				// retry the library fetch
 				res = await fetch('/api/protected/library', {
 					method: 'GET',
@@ -39,32 +46,41 @@
 		}
 	}
 
+	// run the check function when the component loads
 	onMount(async () => {
 		check();
 	});
 
-	// Form validation
-	$: isValidEmail = email.includes('@') && email.includes('.');
-	$: isValidPassword = password.length >= 8;
-	$: isFormValid = isValidEmail && isValidPassword && !isSubmitting;
+	// form validation - these are reactive variables that update as the user types
+	$: isValidEmail = email.includes('@') && email.includes('.'); // basic email validation
+	$: isValidPassword = password.length >= 8; // password must be at least 8 characters
+	$: isFormValid = isValidEmail && isValidPassword && !isSubmitting; // form is valid if all conditions are met
 
+	// toggle password visibility
 	function togglePassword() {
+		console.log('DEBUG: Toggling password visibility');
 		showPassword = !showPassword;
 	}
 
+	// handle the form submission when user clicks "Sign In"
 	async function handleSubmit(event: SubmitEvent) {
 		event.preventDefault();
 		error = null;
+		isSubmitting = true;
+
+		console.log('DEBUG: Attempting login for:', email);
 
 		try {
+			// send the login request to my backend
 			const res = await fetch('/api/login', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
 				body: new URLSearchParams({ mail: email, password }),
-				credentials: 'include'
+				credentials: 'include' // this sends the cookies
 			});
 
 			if (!res.ok) {
+				// try to get a meaningful error message from the response
 				let message = 'Login failed';
 				const contentType = res.headers.get('content-type') || '';
 
@@ -77,23 +93,24 @@
 				throw new Error(message);
 			}
 
-			// Redirect after successful login. SvelteKit's layout.server.ts will now
-			// correctly identify the user as authenticated based on new cookies.
-			console.log('Logged in successfully!');
+			// login was successful! redirect to the library
+			console.log('DEBUG: Login successful, redirecting to library');
 			goto('/library');
 		} catch (err: any) {
-			// ✅ Compare the error's message property
+			console.log('DEBUG: Login failed:', err.message);
+			// handle different types of errors and show appropriate messages
 			if (err.message === 'invalid credentials') {
-				error = err.message.toUpperCase(); // ✅ Call toUpperCase() as a method
+				error = err.message.toUpperCase();
 			} else if (err.message === 'user not found') {
 				error = err.message.toUpperCase();
 			} else if (err.message === 'ACCOUNT ASSOCIATED WITH THIS EMAIL EXISTS SIGN IN USING GOOGLE') {
 				error = err.message.toUpperCase();
 			} else {
-				//  could display the actual error for debugging if you want (careful of nginx errors that are half a page)
-				// error = err.message;
+				// for unexpected errors, show a generic message
 				error = 'Unexpected error occurred. Please try again later.';
 			}
+		} finally {
+			isSubmitting = false;
 		}
 	}
 </script>

@@ -1,8 +1,11 @@
-<!-- src/lib/EpubUpload.svelte -->
+<!-- this is the EPUB upload component -->
+<!-- it handles uploading new books and displaying the library -->
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { Upload } from 'lucide-svelte';
+	
+	// these are the types I use for books in my app
 	export type BookStatus = 'read' | 'unread' | 'finished';
 	export interface Book {
 		id: string;
@@ -13,6 +16,8 @@
 		completion: number;
 		fileUrl: string;
 	}
+	
+	// these are the types that come from my backend API
 	interface FileInfo {
 		id: string;
 		name: string;
@@ -25,22 +30,25 @@
 		total: number;
 	}
 
+	// props that get passed from the parent component
 	interface Props {
-		onBookAdded: (book: Book) => void;
+		onBookAdded: (book: Book) => void; // callback when a new book is added
 	}
 	let { onBookAdded }: Props = $props();
 
-	let fileInput: HTMLInputElement;
-	let isUploading = $state(false);
+	// DOM reference and state
+	let fileInput: HTMLInputElement; // reference to the file input element
+	let isUploading = $state(false); // shows loading state during upload
 
-	// Parse metadata from an EPUB File object
-	// Improved parseEpubMetadata function that ensures blob URLs are converted
+	// this function extracts metadata from an EPUB file
+	// it reads the title, author, and cover image from the EPUB
 	async function parseEpubMetadata(file: File): Promise<{
 		id: string;
 		title: string;
 		author: string;
 		coverUrl: string | null;
 	}> {
+		console.log('DEBUG: Parsing EPUB metadata for:', file.name);
 		return new Promise((resolve, reject) => {
 			const reader = new FileReader();
 			reader.onload = async (e) => {
@@ -50,17 +58,19 @@
 					const book = ePub(arrayBuffer);
 					await book.ready;
 
+					// extract basic metadata
 					const meta = {
-						id: crypto.randomUUID(),
+						id: crypto.randomUUID(), // generate a unique ID
 						title: book.packaging.metadata.title || 'Unknown Title',
 						author: book.packaging.metadata.creator || 'Unknown Author',
 						coverUrl: null as string | null
 					};
 
+					// try to extract the cover image
 					try {
 						const cover = await book.coverUrl();
 						if (cover) {
-							// Always convert blob URLs to data URLs to avoid CSP issues
+							// convert blob URLs to data URLs to avoid security issues
 							if (cover.startsWith('blob:')) {
 								const response = await fetch(cover);
 								const blob = await response.blob();
@@ -71,20 +81,21 @@
 								});
 								meta.coverUrl = dataUrl;
 
-								// Clean up the blob URL
+								// clean up the blob URL to free memory
 								URL.revokeObjectURL(cover);
 							} else {
 								meta.coverUrl = cover;
 							}
 						}
 					} catch (error) {
-						console.warn('Could not extract book cover:', error);
-						// No cover available, use default
+						console.warn('DEBUG: Could not extract book cover:', error);
+						// no cover available, will use default
 					}
 
+					console.log('DEBUG: EPUB metadata extracted:', meta);
 					resolve(meta);
 				} catch (err) {
-					console.error('Error parsing EPUB metadata:', err);
+					console.error('DEBUG: Error parsing EPUB metadata:', err);
 					reject(err);
 				}
 			};
@@ -92,8 +103,10 @@
 			reader.readAsArrayBuffer(file);
 		});
 	}
-	// On mount: load existing EPUBs
+	
+	// load existing books when component mounts
 	onMount(async () => {
+		console.log('DEBUG: EpubUpload component mounting');
 		try {
 			const res = await fetch('/api/protected/library', {
 				credentials: 'include'

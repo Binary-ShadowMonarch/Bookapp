@@ -1,36 +1,38 @@
-<!-- src/lib/Signup.svelte -->
+<!-- this is the signup page component -->
+<!-- it handles user registration with email verification -->
 <script lang="ts">
 	import { Book, Eye, EyeOff, Mail, Lock } from 'lucide-svelte';
 	import { enhance } from '$app/forms';
 	import { onMount } from 'svelte';
 	import type { ActionData } from '../routes/signup/$types';
 
-	// Props - form data from server action
+	// this gets passed from the server action (form validation results)
 	export let form: ActionData | null = null;
 
-	// Component state
-	let isSubmitting = false;
-	let showPassword = false;
-	let mail = form?.mail || '';
-	let password = '';
-	let hasNavigated = false;
+	// component state variables
+	let isSubmitting = false; // prevents double-submission
+	let showPassword = false; // toggle for password visibility
+	let mail = form?.mail || ''; // email from server or empty
+	let password = ''; // password field
+	let hasNavigated = false; // tracks if user has navigated away
 
-	// Reactive server error
+	// if the server returned an error, show it to the user
 	$: serverError = form?.error;
 
-	// Form validation
-	$: isValidEmail = mail.includes('@') && mail.includes('.');
-	$: isValidPassword = password.length >= 8;
-	$: isFormValid = isValidEmail && isValidPassword && !isSubmitting;
+	// form validation - these update as the user types
+	$: isValidEmail = mail.includes('@') && mail.includes('.'); // basic email check
+	$: isValidPassword = password.length >= 8; // password must be 8+ characters
+	$: isFormValid = isValidEmail && isValidPassword && !isSubmitting; // form is ready to submit
 
-	// Page protection - warn before leaving
+	// warn users before they leave if they've started filling out the form
 	onMount(() => {
+		console.log('DEBUG: Signup component mounted');
 		hasNavigated = false;
 
 		const handleBeforeUnload = (e: BeforeUnloadEvent) => {
 			if (mail || password) {
+				console.log('DEBUG: User trying to leave with unsaved data');
 				e.preventDefault();
-
 				return '';
 			}
 		};
@@ -42,13 +44,18 @@
 		};
 	});
 
+	// toggle password visibility for better UX
 	function togglePassword() {
+		console.log('DEBUG: Toggling password visibility');
 		showPassword = !showPassword;
 	}
 </script>
 
+<!-- main container for the signup page -->
 <div class="container">
+	<!-- the signup card with all the form elements -->
 	<div class="card">
+		<!-- header with logo and app name -->
 		<div class="header">
 			<a href="/" class="logo" aria-label="Homepage">
 				<div class="logo-icon">
@@ -58,29 +65,37 @@
 			</a>
 		</div>
 
+		<!-- main content area -->
 		<div class="content">
+			<!-- welcome message and description -->
 			<div class="info-section">
 				<h2>Create Your Account</h2>
 				<p>Join our community and start building your digital library</p>
 			</div>
 
+			<!-- the actual signup form -->
+			<!-- use:enhance makes it work with SvelteKit's progressive enhancement -->
 			<form
 				method="POST"
 				use:enhance={() => {
+					console.log('DEBUG: Form submission started');
 					isSubmitting = true;
 					hasNavigated = true;
 					return async ({ update }) => {
 						await update();
 						isSubmitting = false;
+						console.log('DEBUG: Form submission completed');
 					};
 				}}
 			>
+				<!-- show server errors if any occurred -->
 				{#if serverError}
 					<div class="server-error" role="alert">
 						<p>internal server error please try again later</p>
 					</div>
 				{/if}
 
+				<!-- email input field -->
 				<div class="form-group">
 					<label for="mail" class="form-label">
 						<Mail class="h-4 w-4" />
@@ -97,6 +112,7 @@
 						autocomplete="email"
 						required
 					/>
+					<!-- show validation error if email is invalid -->
 					{#if mail && !isValidEmail}
 						<span class="field-error">Please enter a valid email address</span>
 					{/if}

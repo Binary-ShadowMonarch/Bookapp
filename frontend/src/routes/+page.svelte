@@ -1,10 +1,13 @@
+<!-- this is the main homepage of my book app -->
+<!-- it shows a landing page with features and call-to-action buttons -->
 <script lang="ts">
-	// Imports for this page
+	// imports for this page
 	import { page } from '$app/stores';
 	import NavBar from '$lib/NavBar.svelte';
 	import { Book, Upload, Search, Bookmark, Play } from 'lucide-svelte';
 </script>
 
+<!-- set up the page metadata for SEO -->
 <svelte:head>
 	<title>Books | Your Digital Library for Reading and Organizing</title>
 	<meta
@@ -14,10 +17,11 @@
 	<link rel="canonical" href={$page.url.href} />
 </svelte:head>
 
-<!-- Homepage -->
+<!-- main navigation bar with login/signup buttons -->
 <NavBar>
 	<div slot="name">Books</div>
 	<div slot="right-buttons" class="flex justify-center gap-4 sm:flex-row">
+		<!-- login button -->
 		<a class="w-20" href="/login">
 			<button
 				aria-label="Login"
@@ -42,6 +46,7 @@
 				<span class="sm:inline">Login</span>
 			</button>
 		</a>
+		<!-- sign up button with gradient background -->
 		<a class="w-30" href="/signup">
 			<button
 				aria-label="Sign Up"
@@ -70,26 +75,32 @@
 	</div>
 </NavBar>
 
+<!-- main content area -->
 <main class="relative">
-	<!-- Hero Section -->
+	<!-- hero section with the main headline and call-to-action -->
 	<section class="flex min-h-screen items-center justify-center px-4 pt-16 sm:px-6 lg:px-8">
 		<div class="max-w- 3xl mx-auto text-center">
 			<div class=" ">
+				<!-- main headline with gradient text effect -->
 				<h1
 					class="mb-6 text-6xl font-bold leading-tight text-gray-900 sm:text-4xl lg:text-7xl dark:text-white"
 				>
 					Your Digital <span class="gradient-text">Library</span> Awaits
 				</h1>
+				<!-- subtitle explaining what the app does -->
 				<p class="mx-auto mb-8 max-w-2xl text-xl text-gray-700 sm:text-2xl dark:text-gray-300">
 					Discover, read, and organize your favorite books with our beautiful reading experience
 				</p>
+				<!-- call-to-action buttons -->
 				<div class="flex flex-col justify-center gap-4 sm:flex-row">
+					<!-- primary CTA button -->
 					<a
 						href="/library"
 						class="glow-effect hover-lift rounded-full bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 text-lg font-semibold text-white transition-all duration-300 hover:from-blue-600 hover:to-purple-700"
 					>
 						Get Started Free
 					</a>
+					<!-- secondary button for demo -->
 					<button
 						class="rounded-full border-2 border-gray-300 px-4 py-4 text-lg font-semibold text-gray-800 transition-all duration-300 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
 					>
