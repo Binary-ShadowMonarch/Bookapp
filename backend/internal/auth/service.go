@@ -1,4 +1,3 @@
-// internal/auth/service.go
 package auth
 
 import (
@@ -32,16 +31,15 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-// ErrInvalidCredentials is returned when login fails.
+// these are the error messages I return when something goes wrong
+// I use these to tell the frontend what happened
 var ErrInvalidCredentials = errors.New("invalid credentials")
-
-// ErrUnauthorized is returned when a request lacks a valid JWT.
 var ErrUnauthorized = errors.New("unauthorized")
-
 var ErrEmailExistsLocal = errors.New("an account with this email already exists with a password, please log in with your password")
 var ErrUserNotFound = errors.New("user not found")
 
-// UserStore defines the methods we need for your store.
+// UserStore defines all the database operations I need
+// this is an interface so I can easily swap out different databases later
 type UserStore interface {
 	Create(*models.User) error
 	FindByEmail(string) (*models.User, error)
@@ -59,7 +57,8 @@ type UserStore interface {
 	DeleteAllRefreshTokensForUser(userID int) error
 }
 
-// Service wraps auth logic.
+// Service contains all my authentication and file storage logic
+// this is the main service that handles login, registration, file uploads, etc.
 type Service struct {
 	store             UserStore
 	minio             *minio.Client
@@ -67,22 +66,29 @@ type Service struct {
 	googleOAuthConfig *oauth2.Config
 }
 
-// NewService constructs the auth Service.
+// NewService creates a new auth service with all the necessary connections
+// this sets up MinIO for file storage and Google OAuth for login
 func NewService(us UserStore) *Service {
-	// 1) Construct MinIO client
+	log.Println("DEBUG: Initializing auth service")
+	
+	// set up MinIO client for file storage
+	// MinIO is like AWS S3 but I can run it locally
 	endpoint := os.Getenv("MINIO_ENDPOINT") // e.g. "play.min.io:9000"
 	accessKey := os.Getenv("MINIO_ACCESS_KEY")
 	secretKey := os.Getenv("MINIO_SECRET_KEY")
 
+	log.Printf("DEBUG: Connecting to MinIO at %s", endpoint)
 	mc, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
 		Secure: false,
 	})
 	if err != nil {
-		log.Fatalf("unable to initialize MinIO client: %v", err)
+		log.Fatalf("CRITICAL: Failed to initialize MinIO client: %v", err)
 	}
 
-	// 2) Construct Google OAuth2 Config
+	// set up Google OAuth configuration
+	// this is what allows users to login with their Google account
+	log.Println("DEBUG: Setting up Google OAuth configuration")
 	googleOAuthConfig := &oauth2.Config{
 		ClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
 		ClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
@@ -96,6 +102,7 @@ func NewService(us UserStore) *Service {
 		Endpoint: google.Endpoint,
 	}
 
+	log.Println("DEBUG: Auth service initialization complete")
 	return &Service{
 		store:             us,
 		minio:             mc,
@@ -104,46 +111,56 @@ func NewService(us UserStore) *Service {
 	}
 }
 
+// RequestVerification handles the first step of user registration
+// this sends a verification email with a code to confirm the user's email address
 func (s *Service) RequestVerification(email, password string) error {
+	log.Printf("DEBUG: Requesting verification for email: %s", email)
+	
+	// validate the input - email can't be empty, password must be at least 8 characters
 	if email == "" || len(password) < 8 {
+		log.Printf("DEBUG: Invalid credentials for verification - email: %s, password length: %d", email, len(password))
 		return errors.New("invalid credentials")
 	}
 
-	// Check if user exists by email
+	// check if a user with this email already exists
 	u, err := s.store.FindByEmail(email)
 	if err != nil {
-		// Check if it's a "user not found" error (you need to import your store package or use the specific error)
+		// if the error is "user not found", that's good - it means this is a new registration
 		if err == store.ErrUserNotFound {
-			log.Printf("NEW USER")
-			// User NOT found - continue with verification process (this is for new registrations)
+			log.Printf("DEBUG: New user registration for %s", email)
+			// user NOT found - continue with verification process (this is for new registrations)
 		} else {
-			// Some other database error
-			log.Printf("new err")
-
+			// some other database error occurred
+			log.Printf("DEBUG: Database error during verification request: %v", err)
 			return err
 		}
 	} else {
-		log.Printf("user exists")
-
-		// User EXISTS - return error to prevent duplicate registrations
+		log.Printf("DEBUG: User already exists for %s with provider %s", email, u.Provider)
+		// user EXISTS - return error to prevent duplicate registrations
 		return fmt.Errorf("ACCOUNT ASSOCIATED WITH THIS EMAIL EXISTS SIGN IN USING %s", strings.ToUpper(u.Provider))
 	}
 
+	// hash the password before storing it
 	hashed, err := HashPassword(password)
 	if err != nil {
+		log.Printf("DEBUG: Failed to hash password for %s: %v", email, err)
 		return err
 	}
 
-	// generate 6‑digit code
+	// generate a random 6-digit verification code
 	code := fmt.Sprintf("%06d", rand.Intn(1_000_000))
-	expires := time.Now().UTC().Add(5 * time.Minute)
+	expires := time.Now().UTC().Add(5 * time.Minute) // code expires in 5 minutes
 
-	// persist
+	log.Printf("DEBUG: Generated verification code for %s, expires at %v", email, expires)
+
+	// save the verification data to the database
 	if err := s.store.SaveVerification(email, hashed, code, expires); err != nil {
+		log.Printf("DEBUG: Failed to save verification for %s: %v", email, err)
 		return err
 	}
 
-	// send email
+	// send the verification email to the user
+	log.Printf("DEBUG: Sending verification email to %s", email)
 	return s.sendVerificationEmail(email, code)
 }
 
@@ -222,62 +239,64 @@ func (s *Service) RequestVerification(email, password string) error {
 // 	return accessToken, refreshToken, nil
 // }
 
+// Refresh exchanges an old refresh token for new access and refresh tokens
+// this is called token rotation and it's more secure than just extending tokens
 func (s *Service) Refresh(oldRefreshToken string) (newAccessToken, newRefreshToken string, err error) {
+	log.Printf("DEBUG: Token refresh initiated")
+	log.Printf("DEBUG: Old refresh token: %s", oldRefreshToken)
 
-	log.Printf("DEBUG: Refresh executed")
-	log.Printf("DEBUG: old Refresh token : %s", oldRefreshToken)
-
-	// 1) Verify the JWT signature and expiration first
+	// first, verify the JWT signature and check if it's expired
 	if _, err := ParseToken(oldRefreshToken); err != nil {
-		log.Printf("DEBUG: failed to parse token : %s", err)
+		log.Printf("DEBUG: Failed to parse refresh token: %v", err)
 		return "", "", ErrUnauthorized
 	}
 
-	log.Printf("DEBUG: token parsed")
+	log.Printf("DEBUG: Refresh token parsed successfully")
 
-	// a. Validate the old token in the DB
+	// check if this refresh token exists in my database
+	// this prevents using old tokens that have already been used
 	userID, err := s.store.FindRefreshToken(oldRefreshToken)
 	if err != nil {
-		log.Printf("DEBUG: cant find the token : %s", err)
+		log.Printf("DEBUG: Refresh token not found in database: %v", err)
 		return "", "", ErrUnauthorized
 	}
-	log.Printf("DEBUG: token validated")
+	log.Printf("DEBUG: Refresh token validated in database")
 
-	// c. Get user details to create new tokens
+	// get the user details so I can create new tokens for them
 	u, err := s.store.FindByID(userID)
 	if err != nil {
-		log.Printf("DEBUG: critical cant find user( is the user logged in): %s", err)
+		log.Printf("DEBUG: Critical error - can't find user for refresh: %v", err)
 		return "", "", err
 	}
 
-	// d. Issue a new pair of tokens
+	// create a new access token (short-lived)
 	newAccessToken, err = CreateToken(u.Email, AccessTTL)
 	if err != nil {
-		log.Printf("DEBUG: can't create the access token  : %s", err)
+		log.Printf("DEBUG: Failed to create new access token: %v", err)
 		return "", "", err
 	}
-	log.Printf("DEBUG: created access token")
+	log.Printf("DEBUG: New access token created successfully")
 
+	// create a new refresh token (long-lived)
 	newRefreshToken, err = CreateToken(u.Email, RefreshTTL)
 	if err != nil {
-		log.Printf("DEBUG: can't create the refresh token  : %s", err)
-
+		log.Printf("DEBUG: Failed to create new refresh token: %v", err)
 		return "", "", err
 	}
-	log.Printf("DEBUG: created refresh token")
+	log.Printf("DEBUG: New refresh token created successfully")
 
-	// e. Persist the new refresh token
+	// save the new refresh token to the database
 	expiresAt := time.Now().UTC().Add(RefreshTTL)
 	if err := s.store.SaveRefreshToken(newRefreshToken, u.ID, expiresAt); err != nil {
-		log.Printf("DEBUG: SaveRefreshToken failed  : %s", err)
-
+		log.Printf("DEBUG: Failed to save new refresh token: %v", err)
 		return "", "", err
 	}
-	log.Printf("DEBUG: tokens saved ")
+	log.Printf("DEBUG: New refresh token saved to database")
 
-	// b. Delete the old token (it has been used)
+	// delete the old refresh token since it's been used
+	// this prevents the same token from being used multiple times
 	if err := s.store.DeleteRefreshToken(oldRefreshToken); err != nil {
-		log.Printf("DEBUG: cant delete refresh token : %s", err)
+		log.Printf("DEBUG: Failed to delete old refresh token: %v", err)
 		return "", "", err
 	}
 
@@ -293,30 +312,40 @@ func (s *Service) Logout(mail string) error {
 }
 
 // Authorize parses and verifies the Bearer token or access_token cookie.
+// Authorize extracts and validates the JWT token from a request
+// this is used by middleware to check if a user is logged in
+// it looks for the token in either the Authorization header or a cookie
 func (s *Service) Authorize(r *http.Request) (string, error) {
+	log.Printf("DEBUG: Authorizing request: %s %s", r.Method, r.URL.Path)
 	var token string
 
-	// 1. Try Authorization header first
+	// first, try to get the token from the Authorization header
+	// this is the standard way APIs handle authentication
 	authHeader := r.Header.Get("Authorization")
 	parts := strings.SplitN(authHeader, " ", 2)
 	if len(parts) == 2 && parts[0] == "Bearer" {
 		token = parts[1]
+		log.Printf("DEBUG: Found token in Authorization header")
 	} else {
-		// 2. Fallback to access_token cookie
+		// if no Authorization header, try to get the token from a cookie
+		// this is useful for web applications
 		cookie, err := r.Cookie("access_token")
 		if err != nil {
+			log.Printf("DEBUG: No token found in header or cookie")
 			return "", ErrUnauthorized
 		}
 		token = cookie.Value
+		log.Printf("DEBUG: Found token in cookie")
 	}
 
-	// 3. Parse and validate token
+	// parse and validate the token
 	claims, err := ParseToken(token)
 	if err != nil {
-		log.Printf("DEBUG : parse error :%s", err)
+		log.Printf("DEBUG: Token parsing failed: %v", err)
 		return "", ErrUnauthorized
 	}
 
+	log.Printf("DEBUG: Authorization successful for %s", claims.Email)
 	return claims.Email, nil
 }
 
@@ -333,49 +362,60 @@ func (s *Service) sendVerificationEmail(to, code string) error {
 	return err
 }
 
-// UploadFile uploads the given multipart file to the MinIO bucket for the given user ID.
-// It returns the public URL (or any URL scheme you choose) of the uploaded object.
+// UploadFile uploads a book file to the user's personal storage bucket
+// this is how users add new books to their library
 func (s *Service) UploadFile(ctx context.Context, userID int, file multipart.File, header *multipart.FileHeader) (string, error) {
-	// Ensure bucket name matches your prefix + user ID
+	log.Printf("DEBUG: Uploading file %s for user %d", header.Filename, userID)
+	
+	// create the bucket name for this user
+	// each user gets their own bucket to keep their files separate
 	bucket := s.bucketPref + strconv.Itoa(userID)
 
-	// Create the bucket if it doesn't exist
+	// make sure the user's bucket exists, create it if it doesn't
 	exists, err := s.minio.BucketExists(ctx, bucket)
 	if err != nil {
+		log.Printf("DEBUG: Failed to check bucket existence: %v", err)
 		return "", fmt.Errorf("checking bucket existence: %w", err)
 	}
 	if !exists {
+		log.Printf("DEBUG: Creating bucket for user %d", userID)
 		if err := s.minio.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
+			log.Printf("DEBUG: Failed to create bucket: %v", err)
 			return "", fmt.Errorf("making bucket: %w", err)
 		}
 	}
 
-	// Construct an object name: you might want to
-	// prefix with a timestamp or user ID for uniqueness
+	// create a unique filename to avoid conflicts
+	// I use userID + timestamp + original extension
 	objectName := fmt.Sprintf("%d_%d%s",
 		userID,
 		time.Now().UTC().UnixNano(),
 		filepath.Ext(header.Filename),
 	)
 
-	// Upload the file
+	log.Printf("DEBUG: Uploading %s as %s to bucket %s", header.Filename, objectName, bucket)
+
+	// actually upload the file to MinIO
 	info, err := s.minio.PutObject(
 		ctx,
 		bucket,
 		objectName,
-		io.LimitReader(file, header.Size), // ensure PutObject knows size
+		io.LimitReader(file, header.Size), // make sure MinIO knows the file size
 		header.Size,
 		minio.PutObjectOptions{
 			ContentType: header.Header.Get("Content-Type"),
-			// You can set ACL-like via metadata or bucket policy
+			// I can set ACL-like permissions via metadata or bucket policy
 		},
 	)
 	if err != nil {
+		log.Printf("DEBUG: Failed to upload file to MinIO: %v", err)
 		return "", fmt.Errorf("uploading to minio: %w", err)
 	}
 
-	// Construct a URL – adjust to your MinIO endpoint / gateway
+	// create a URL that goes through my server instead of direct MinIO access
+	// this gives me control over who can access the files
 	url := fmt.Sprintf("/api/protected/files/%s/%s", bucket, info.Key)
+	log.Printf("DEBUG: File uploaded successfully, URL: %s", url)
 	return url, nil
 }
 
@@ -592,29 +632,39 @@ func (s *Service) issueAndSaveTokens(u *models.User) (accessToken, refreshToken 
 	return accessToken, refreshToken, nil
 }
 
+// Login handles user authentication with email and password
+// this is the main login function that validates credentials and issues tokens
 func (s *Service) Login(mail, password string) (accessToken, refreshToken string, err error) {
+	log.Printf("DEBUG: Login attempt for email: %s", mail)
+	
+	// first, try to find the user by email
 	u, err := s.store.FindByEmail(mail)
 
-	// 1. ✅ Check for an error FIRST. This handles the "user not found" case.
-	// If err is not nil (e.g., user not found), the login fails immediately.
+	// check if the user exists - if not, login fails
 	if err != nil {
 		if err == store.ErrUserNotFound {
+			log.Printf("DEBUG: Login failed - user not found: %s", mail)
 			return "", "", ErrUserNotFound
 		}
+		log.Printf("DEBUG: Login failed - database error: %v", err)
 		return "", "", ErrInvalidCredentials
 	}
 
-	// 2. Now that we know 'u' is not nil, we can safely check its properties.
+	// check if this is a local account (not Google login)
+	// if someone tries to login with password but they used Google, tell them to use Google
 	if u.Provider != "local" {
+		log.Printf("DEBUG: Login failed - account uses %s provider, not local", u.Provider)
 		return "", "", fmt.Errorf("ACCOUNT ASSOCIATED WITH THIS EMAIL EXISTS SIGN IN USING %s", strings.ToUpper(u.Provider))
 	}
 
-	// 3. Finally, check if the password is correct.
+	// verify the password is correct
 	if !CheckPassword(u.HashedPassword, password) {
+		log.Printf("DEBUG: Login failed - invalid password for %s", mail)
 		return "", "", ErrInvalidCredentials
 	}
 
-	// If all checks pass, issue the tokens.
+	log.Printf("DEBUG: Login successful for %s, issuing tokens", mail)
+	// if all checks pass, create and return the tokens
 	return s.issueAndSaveTokens(u)
 }
 
