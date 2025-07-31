@@ -4,8 +4,10 @@ import (
 	"bookapp/internal/auth"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -91,10 +93,10 @@ func GoogleCallbackHandler(svc *auth.Service) http.HandlerFunc {
 			// but they already have a local account with the same email
 			if err == auth.ErrEmailExistsLocal {
 				log.Printf("DEBUG: Google login failed - email already exists locally")
-				http.Error(w, "A Local account exists with this email please login ", http.StatusBadRequest)
-
+				errorMessage := "A Local account exists with this email, please login with your password." // the error message
+				redirectURL := fmt.Sprintf("/login?error=%s", url.QueryEscape(errorMessage))
 				// redirect to login page with an error message
-				// http.Redirect(w, r, "/login?error=email_exists", http.StatusSeeOther)
+				http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 				return
 			}
 			log.Printf("DEBUG: Google login failed: %v", err)
