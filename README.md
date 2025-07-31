@@ -103,7 +103,7 @@ The whole thing works on desktop, tablet, and mobile. I used Tailwind CSS becaus
 I was originally planning to use Electron or Tauri for cross-platform development, but I discovered SvelteKit through Fireship's videos and it looked promising, and I also watched 100 seconds of sveltekit and svelte so I have around 10 years of experience just from that video(No I don't and it was painful to figure out the authentication especially refresh token). I had some web development experience, so it made sense to start there. Plus, I can always wrap it in Tauri later if I want a native app, and the community on Discord was friendly and I saw their projects with Tauri and SvelteKit, the application is headache for my future self.
 
 ### Why Go for the Backend?
-Started with a simple Go auth tutorial from YouTube, but it evolved into something much more complex. I appreciate Go's simplicity and the fact that it compiles to a single binary. The standard library is comprehensive, and there's official support for things like MinIO (which to be fair I didn't know when I chose this). The main reason was file uploads and concurrency; I tried to use parallel processes in Python for the CS50 finance problem set to make HTTP requests concurrent but at that time I couldn't get it to work, also I heard its compiled to a single binary and fast.
+Started with a simple Go auth tutorial from YouTube, but it evolved into something much more complex. I appreciate Go's simplicity and the fact that it compiles to a single binary and no memory management like C. The standard library is comprehensive, and there's official support for things like MinIO (which to be fair I didn't know when I chose go). The main reason was file uploads and concurrency; I tried to use parallel processes in Python for the CS50 finance problem set to make HTTP requests concurrent but at that time I couldn't get it to work, also its compiled to a single binary and fast.
 
 ### Why PostgreSQL?
 I was introduced to SQLite in the course, and PostgreSQL felt like the natural next step for a full-featured, reliable, and open-source relational database.
@@ -120,7 +120,7 @@ This was probably the hardest part. I struggled the most with understanding how 
 Getting EPUB.js to work properly was challenging. The documentation is sparse, and the API changes between versions. I ended up creating a worker pool to handle parsing in the background, which was actually a fun challenge.
 
 ### Theme Switching Issues
-When implementing smooth scrolling, I broke the dark mode on EPUB.js. The issue was that it would only change theme once loaded and on scroll to next page (that was EPUB rendering and I was applying theme on rendition after registering theme). This took me a while to figure out. Here is my actual commit message
+When implementing smooth scrolling, I broke the dark mode on EPUBjs. The issue was that it would only change theme once loaded and on scroll to next page (that was EPUB rendering and I was applying theme on rendition after registering theme). This happened like fix one thing and another was broke and it me a while to figure out. Here is my actual commit message
  `󰣇 ~/Documents/Final project   master  !? ❯ git checkout backend/                                                     23:01 
 backend/       FETCH_HEAD     frontend/      HEAD           master         ORIG_HEAD      origin/master
 f4b3611  -- [HEAD^^]  introduced & fixed bug on previous commit theme change fix (22 hours ago)
@@ -136,35 +136,36 @@ Getting all the services to work together in Docker was like herding cats. Had t
 
 This project taught me a lot about full-stack development, containerization, and building a real application that people might actually use. I learned about:
 
-- Web Workers and background processing, never knew i could detect clients cpu cores and use web workers to do stuff on my clients browser, not sure how it affects ux like opening multiple browser tabs, I use all cores for parsing like I create workers based on how many logical cores are available(pretty sure browser should handle and make available/claim back resources for my workers/parser).
-- JWT authentication and security best practices like session-based and JSON web tokens (like how I get automatically logged in on sites I visit like Notion - I get it now)
-- Docker orchestration and microservices, honestly I still don't get it fully and it barely works on my current setup, but cool thing was once i figured it out and made it work, it just ran with no hassle when deploying on cloudpanel over on the ubuntu server without no hiccups. I didn't download/install node, go pnpm, manually ran any containers, just `git pull` created envs and `docker-compose --env-file ./.env up --build -d` just worked!
+- Web Workers and background processing, never knew i could detect clients cpu cores and use web workers to do stuff on my clients browser, not sure how it affects ux like opening multiple browser tabs, I use all cores for parsing. I create workers based on how many logical cores are available(pretty sure browser should handle and make available/claim back resources used by my workers/parser).
+- JWT authentication and security best practices like session-based and JSON web tokens (how I get automatically logged in on sites I visit like Notion - I get it now)
+- Docker orchestration and microservices, honestly I still don't get it fully and it barely works on my current setup, but cool thing was once i figured it out and made it work, it just ran with no hassle when deploying on cloudpanel over on the ubuntu server no hiccups. I didn't download/install node, go pnpm, manually ran any containers, just `git pull` created envs and `docker-compose --env-file ./.env up --build -d` just worked!
+- Github, my project is on private repository, and when i push new changes, I didn't wanted to manually download zip, scp my file to ubuntu server and then run docker-compose, But I didn't have to, I created a deploy key for my repository with read access, and set it up on ubuntu server to use it, then I can now just do `git pull` to pull latest changes once cloned! pretty awesome right? I also have a deploy.sh that just does this for me when i do ./deploy.sh.
 - EPUB file format and parsing, I thought .epub was file type like .jpg for image, turned out its an archive style, with structure and multiple files, like html/xhtml , css, fonts inside. I did't know there could be images inside .epub.
-- Responsive design and user experience (with no users 😆)
-- Database design and optimization, for now I have one main users table that stores email and hashed passwords with unique id, other for email verification which saves time, email and code, and upon duplication saves new time and code but updates instead of adding another code entry with duplicate email. I thoughht of clearing this table periodically but seems unnecessary for now, I do have a function that runs once 24 hours but commented it out after knowing its just few MB for lots of rows!
+- Responsive design and user experience (with no users 😆), tailwind was such an awesome experience, I can change styles for one element without worrying what button will disappear. I also later found uiverse.io(got search bar and a form) and daisyui(the loading ripple) wish I could found these sooner,as it would have helped me build fronted a bit faster, uiverse components could be copied in any library like svelte which was awesome! I also found lucide, they have icons for all i could want. I remember for my first portfolio website finding free icons downloading it in png, converting to svg.
+- Database design and optimization, for now I have one main users table that stores email and hashed passwords with unique id, other for email verification which saves time, email and code, and upon duplication saves new time and code but updates instead of adding another code entry with duplicate email. I thought of clearing this table periodically but seems unnecessary for now, I do have a function that runs once 24 hours but commented it out after knowing its just few MB for lots of rows!
 
 ### The Backend Developer Meme
-At one point, I looked at my app and realized the majority of my efforts were in the backend, while the frontend was still pretty basic (just as I left it weeks ago). I finally understood the meme about backend developers staring at frontend developers who just changed a button to yellow. I couldn't see as a client (when visiting the web app) what I did on the backend myself. But I don't regret it - I now have a solid understanding of cookies, authentication, and I can reuse this exact Go backend for future apps' authentication flow.
+At one point, I looked at my app and realized the majority of my efforts were in the backend, while the frontend was still pretty basic (just as I left it weeks ago). I finally understood the meme about backend developers staring at frontend developer who just changed a button to yellow. I couldn't see as a client (when visiting the web app) what I did on the backend myself. But I don't regret it - I now have a solid understanding of cookies, authentication, and I can reuse this exact Go backend for future apps authentication flow.
 
 ### Testing and Development Tools
-I mostly used curl and scripts for testing (like the `checker.sh` script in the backend folder), but I discovered Postman and it's actually pretty useful for testing API endpoints. I also learned to appreciate Git more after losing 6 hours of work to VSCode crashing. Now I stage changes regularly and commit frequently. Also almost screwed up with git as well and used to checkout my previous commits frequently. I once did git reset --hard "head" thinking i can come back to this but it was gone, thankfully it was not much thats lost.
+I mostly used curl and scripts for testing (like the `checker.sh` script in the backend folder), but I discovered Postman and it's actually pretty useful for testing API endpoints. I also learned to appreciate Git more after losing 6 hours of work to VSCode crashing(auto save on no errors was on but svelte component was screaming because of unused css selector and didn't save and my laptop doesnot hold power, just shuts off on power outage). Now I stage changes regularly and commit frequently. Also almost screwed up with git as well and used to checkout my previous commits frequently. I once did git reset --hard "head" thinking i can come back to this but it was gone, thankfully it was not much thats lost. I also feel why documentation is important, I don't have one and I forget why was that there, and only message i can look up for now is comments and commit messages, I'll be implementing a bit detailed documentation for this project later on.
 
 ## Future Improvements (If I Ever Get Around to It)
 
-- Add support for other book formats (PDF, MOBI) - My dad said he would use this to add his books (Nepali, Hindi, and Sanskrit) as he likes to read stories and poems (Ramayana, Puranas). I might need to add conversion or accept more formats.
+- Add support for other book formats (PDF, MOBI) - My dad said he would use my app to add his books (Nepali, Hindi, and Sanskrit) as he likes to read stories and poems (Ramayana, Puranas). I might need to add conversion or accept more formats.
 - Implement book recommendations
 - Add social features (sharing, reviews)
 - Add reading statistics and analytics
-- Implement offline reading support as a pwa(progressive web application, learned this from sveltekit discord)
-- Add language options (as requested by my first client - my dad)
-- Page flipping animations
-- Global EPUB store (though I have no idea how to implement this legally - I don't want to illegally distribute authors' work, only books that authors themselves made available for free)
-- Forgot password functionality
+- Implement offline reading support as a pwa(progressive web application, that popup to install it as an app to use it offline)
+- Add language options and natural sounding text to speech (as requested by my first client - my dad)
+- Page flipping animations for paginated view
+- Global EPUB store (though I have no idea how to implement this legally - I don't want to illegally distribute authors work, only books that authors themselves made available for free)
+- Forgot password functionality(this is my first on list )
 - Delete books feature
 
 ## How to Run This Thing
 
-2. Open .env and fill in your configuration (as per the names)
+2. Open .env_template and fill in your configuration (as per the names)
 3. Run `docker-compose --env-file ./.env up --build -d`
 4. Visit `http://localhost:4353`
 
