@@ -15,6 +15,7 @@ node_modules/
 /.svelte-kit
 /.pnpm-store
 /.pnpm-store/
+.pnpm-store/
 
 # sql dev backups
 /backups/
