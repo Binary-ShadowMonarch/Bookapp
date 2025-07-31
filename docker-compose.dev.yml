@@ -1,0 +1,150 @@
+services:
+  # Nginx Reverse Proxy - The single entry point for your app
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: bookapp-proxy-dev
+    restart: always
+    ports:
+      # Maps host port 80 to nginx container port 80.
+      # Change "80:80" to "8888:80" if port 80 is taken on your host.
+      - "4353:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - internal
+
+  # SvelteKit Frontend Service - Development Mode
+  frontend:
+    image: node:20-alpine
+    container_name: bookapp-frontend-dev
+    restart: always
+    working_dir: /app
+    environment:
+      # The Node adapter inside the container listens on port 3000
+      - PORT=3000
+      # Your SvelteKit app can use this to know where the API is
+      - PUBLIC_API_URL=/api
+      # - ORIGIN=https://books.saurabpoudel.com.np
+      - ORIGIN=http://localhost:4353
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: sh -c "npm i -g pnpm && pnpm install && pnpm dev --host 0.0.0.0 --port 3000"
+    depends_on:
+      - backend
+    networks:
+      - internal
+
+  # Go Backend Service - Development Mode
+  backend:
+    image: golang:1.24.5-bookworm
+    container_name: bookapp-backend-dev
+    restart: always
+    working_dir: /app
+    environment:
+      # Use variables from the .env file
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - MINIO_USE_SSL=false
+      - JWT_SECRET=${JWT_SECRET}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URL=${GOOGLE_REDIRECT_URL}
+      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
+      - SENDGRID_EMAIL=${SENDGRID_EMAIL}
+    volumes:
+      - ./backend:/app
+      - go-mod-cache:/go/pkg/mod
+    command: sh -c "go mod download && go run ./cmd/server/main.go"
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    networks:
+      - internal
+
+  # PostgreSQL Database Service
+  db:
+    image: postgres:latest
+    container_name: bookapp-db-dev
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      # Mounts a named volume to the standard postgres data directory
+      - pgdata:/var/lib/postgresql/data
+      # Mounts the init script to run on first launch
+      - ./db-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  # Minio File Storage Service
+  minio:
+    image: minio/minio:latest
+    container_name: bookapp-minio-dev
+    restart: always
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    # Note: Ports 9000/9001 are not exposed to the host.
+    # The 'backend' service will access it via the internal network.
+    # If you need to access the Minio console from your host, add:
+    # ports:
+    #   - "9001:9001"
+    networks:
+      - internal
+
+  # Database Backup Service
+  db-backup:
+    image: postgres:latest
+    container_name: bookapp-db-backup-dev
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGUSER: ${POSTGRES_USER}
+      PGDATABASE: ${POSTGRES_DB}
+      PGHOST: db # Service name of the database
+    volumes:
+      - ./backups:/backups
+    entrypoint: >
+      sh -c "
+        mkdir -p /backups &&
+        while true; do
+          ts=$$(date +%F_%H%M);
+          pg_dump -h db -U $${PGUSER} $${PGDATABASE} > /backups/bookapp_backup_$${ts}.sql &&
+          echo \"[+] backup $${ts} done\" &&
+          find /backups -type f -mtime +7 -name '*.sql' -delete &&
+          sleep 24h;
+        done
+      "
+    networks:
+      - internal
+
+volumes:
+  pgdata:
+  minio_data:
+  go-mod-cache:
+
+
+networks:
+  internal:
+    driver: bridge

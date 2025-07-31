@@ -17,8 +17,15 @@
 	let hasNavigated = false; // tracks if user has navigated away
 
 	// if the server returned an error, show it to the user
-	$: serverError = form?.error;
-
+	$: serverError = form?.error?.trim();
+	let errMessage = 'Signup error';
+	if (errMessage === 'ACCOUNT ASSOCIATED WITH THIS EMAIL EXISTS SIGN IN USING GOOGLE') {
+		errMessage = errMessage;
+	} else if (errMessage === 'ACCOUNT ASSOCIATED WITH THIS EMAIL EXISTS SIGN IN USING PASSWORD') {
+		errMessage = errMessage;
+	} else {
+		errMessage = 'Something went wrong, please try again later';
+	}
 	// form validation - these update as the user types
 	$: isValidEmail = mail.includes('@') && mail.includes('.'); // basic email check
 	$: isValidPassword = password.length >= 8; // password must be 8+ characters
@@ -91,7 +98,7 @@
 				<!-- show server errors if any occurred -->
 				{#if serverError}
 					<div class="server-error" role="alert">
-						<p>internal server error please try again later</p>
+						<p>{serverError}</p>
 					</div>
 				{/if}
 

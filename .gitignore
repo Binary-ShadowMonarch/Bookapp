@@ -13,6 +13,8 @@ node_modules/
 /build/
 /dist/
 /.svelte-kit
+.pnpm-store
+/.pnpm-store/
 
 # sql dev backups
 /backups/

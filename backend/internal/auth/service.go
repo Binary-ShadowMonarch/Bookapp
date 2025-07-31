@@ -35,7 +35,7 @@ import (
 // I use these to tell the frontend what happened
 var ErrInvalidCredentials = errors.New("invalid credentials")
 var ErrUnauthorized = errors.New("unauthorized")
-var ErrEmailExistsLocal = errors.New("an account with this email already exists with a password, please log in with your password")
+var ErrEmailExistsLocal = errors.New("an account with this email already exists, please log in with your password")
 var ErrUserNotFound = errors.New("user not found")
 
 // UserStore defines all the database operations I need
@@ -70,7 +70,7 @@ type Service struct {
 // this sets up MinIO for file storage and Google OAuth for login
 func NewService(us UserStore) *Service {
 	log.Println("DEBUG: Initializing auth service")
-	
+
 	// set up MinIO client for file storage
 	// MinIO is like AWS S3 but I can run it locally
 	endpoint := os.Getenv("MINIO_ENDPOINT") // e.g. "play.min.io:9000"
@@ -115,7 +115,7 @@ func NewService(us UserStore) *Service {
 // this sends a verification email with a code to confirm the user's email address
 func (s *Service) RequestVerification(email, password string) error {
 	log.Printf("DEBUG: Requesting verification for email: %s", email)
-	
+
 	// validate the input - email can't be empty, password must be at least 8 characters
 	if email == "" || len(password) < 8 {
 		log.Printf("DEBUG: Invalid credentials for verification - email: %s, password length: %d", email, len(password))
@@ -136,8 +136,12 @@ func (s *Service) RequestVerification(email, password string) error {
 		}
 	} else {
 		log.Printf("DEBUG: User already exists for %s with provider %s", email, u.Provider)
-		// user EXISTS - return error to prevent duplicate registrations
+		if u.Provider == "local" {
+
+			return fmt.Errorf("ACCOUNT ASSOCIATED WITH THIS EMAIL EXISTS SIGN IN USING PASSWORD")
+		}
 		return fmt.Errorf("ACCOUNT ASSOCIATED WITH THIS EMAIL EXISTS SIGN IN USING %s", strings.ToUpper(u.Provider))
+		// user EXISTS - return error to prevent duplicate registrations
 	}
 
 	// hash the password before storing it
@@ -366,7 +370,7 @@ func (s *Service) sendVerificationEmail(to, code string) error {
 // this is how users add new books to their library
 func (s *Service) UploadFile(ctx context.Context, userID int, file multipart.File, header *multipart.FileHeader) (string, error) {
 	log.Printf("DEBUG: Uploading file %s for user %d", header.Filename, userID)
-	
+
 	// create the bucket name for this user
 	// each user gets their own bucket to keep their files separate
 	bucket := s.bucketPref + strconv.Itoa(userID)
@@ -636,7 +640,7 @@ func (s *Service) issueAndSaveTokens(u *models.User) (accessToken, refreshToken 
 // this is the main login function that validates credentials and issues tokens
 func (s *Service) Login(mail, password string) (accessToken, refreshToken string, err error) {
 	log.Printf("DEBUG: Login attempt for email: %s", mail)
-	
+
 	// first, try to find the user by email
 	u, err := s.store.FindByEmail(mail)
 

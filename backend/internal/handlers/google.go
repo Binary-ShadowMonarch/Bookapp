@@ -18,7 +18,7 @@ const stateCookieName = "oauthstate"
 func GoogleLoginHandler(svc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("DEBUG: Google login initiated")
-		
+
 		// generate a random state string for security
 		// this prevents CSRF attacks by making sure the callback comes from Google
 		b := make([]byte, 16)
@@ -32,7 +32,7 @@ func GoogleLoginHandler(svc *auth.Service) http.HandlerFunc {
 		http.SetCookie(w, &http.Cookie{
 			Name:     stateCookieName,
 			Value:    state,
-			Expires:  time.Now().Add(10 * time.Minute),
+			Expires:  time.Now().UTC().Add(3 * time.Minute),
 			HttpOnly: true,
 			Path:     "/",
 			Secure:   true, // needs HTTPS in production
@@ -52,7 +52,7 @@ func GoogleLoginHandler(svc *auth.Service) http.HandlerFunc {
 func GoogleCallbackHandler(svc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("DEBUG: Google OAuth callback received")
-		
+
 		// first, check the state cookie to make sure this is a legitimate callback
 		// this prevents CSRF attacks
 		stateCookie, err := r.Cookie(stateCookieName)
@@ -61,7 +61,7 @@ func GoogleCallbackHandler(svc *auth.Service) http.HandlerFunc {
 			http.Error(w, "state cookie not found", http.StatusBadRequest)
 			return
 		}
-		
+
 		// compare the state from the cookie with the state from the URL
 		// they should match if this is a legitimate callback
 		if r.URL.Query().Get("state") != stateCookie.Value {
@@ -91,8 +91,10 @@ func GoogleCallbackHandler(svc *auth.Service) http.HandlerFunc {
 			// but they already have a local account with the same email
 			if err == auth.ErrEmailExistsLocal {
 				log.Printf("DEBUG: Google login failed - email already exists locally")
+				http.Error(w, "A Local account exists with this email please login ", http.StatusBadRequest)
+
 				// redirect to login page with an error message
-				http.Redirect(w, r, "/login?error=email_exists", http.StatusSeeOther)
+				// http.Redirect(w, r, "/login?error=email_exists", http.StatusSeeOther)
 				return
 			}
 			log.Printf("DEBUG: Google login failed: %v", err)

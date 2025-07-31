@@ -6,7 +6,7 @@
 	import { goto } from '$app/navigation';
 	import type { PageData, ActionData } from './$types';
 
-	// --- PROPS ---
+	// --- PROPS --
 	export let data: PageData;
 	export let form: ActionData;
 
@@ -119,7 +119,7 @@
 	<title>Verify Email - Books</title>
 </svelte:head>
 
-<div class="container flex min-h-screen items-center justify-center">
+<div class="containerd">
 	<div class="card">
 		<div class="header">
 			<a href="/" class="logo" aria-label="Homepage">
@@ -214,7 +214,7 @@
 </div>
 
 <style>
-	.container {
+	.containerd {
 		display: flex;
 		justify-content: center;
 		align-items: center;
