@@ -13,7 +13,7 @@ import (
 func LogoutHandler(svc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("DEBUG: Logout request received")
-		
+
 		// only allow POST requests for security
 		if r.Method != http.MethodPost {
 			log.Printf("DEBUG: Logout method not allowed: %s", r.Method)
@@ -39,7 +39,7 @@ func LogoutHandler(svc *auth.Service) http.HandlerFunc {
 		http.SetCookie(w, &http.Cookie{
 			Name:     "access_token",
 			Value:    "",
-			Expires:  time.Now().Add(-1 * time.Hour),
+			Expires:  time.Now().UTC().Add(-1 * time.Hour),
 			HttpOnly: true,
 			Secure:   false, // false for logout since we want it to work without HTTPS
 			SameSite: http.SameSiteStrictMode,
