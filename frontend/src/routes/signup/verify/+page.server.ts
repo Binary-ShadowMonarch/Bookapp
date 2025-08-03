@@ -14,6 +14,7 @@ export const load: PageServerLoad = ({ cookies, url }) => {
     if (!mail) {
         throw redirect(303, '/signup');
     }
+    // consume
     cookies.delete("pending", { path: '/' })
     return {
         mail

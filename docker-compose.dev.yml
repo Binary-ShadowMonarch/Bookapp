@@ -25,7 +25,7 @@ services:
     environment:
       # The Node adapter inside the container listens on port 3000
       - PORT=3000
-      # Your SvelteKit app can use this to know where the API is
+      # SvelteKit app can use this to know where the API is
       - PUBLIC_API_URL=/api
       # - ORIGIN=https://books.saurabpoudel.com.np
       - ORIGIN=http://localhost:4353

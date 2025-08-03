@@ -40,6 +40,7 @@ export const actions: Actions = {
 
             if (!res.ok) {
                 const err = await res.text();
+                console.log(err)
                 return fail(res.status, { mail, error: err.toUpperCase() });
             }
             const token = crypto.randomUUID();

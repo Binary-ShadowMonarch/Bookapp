@@ -5,7 +5,7 @@
 	export let id: string;
 	export let title: string;
 	export let author: string;
-	export let image: string = '/default.webp'; // default cover if none provided
+	export let image: string = '/candle.webp'; // default cover if none provided
 	export let status: 'read' | 'unread' | 'finished' = 'unread';
 	export let completion: number = 0; // reading progress percentage
 	export let fileUrl: string; // URL to the actual book file
@@ -15,7 +15,7 @@
 	function handleImgError(event: Event) {
 		console.log('DEBUG: Book cover image failed to load, using default');
 		const target = event.target as HTMLImageElement | null;
-		if (target) target.src = '/default.webp';
+		if (target) target.src = '/candle.webp';
 	}
 
 	// when someone clicks to open the book, call the parent's function
@@ -61,7 +61,7 @@
 		<h3 class="truncate text-base font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
 		<!-- author name - also gets truncated -->
 		<p class="truncate text-sm text-gray-700 dark:text-gray-300">{author}</p>
-		
+
 		<!-- status badge with reading progress bar -->
 		<span
 			class="mt-2 inline-flex items-center gap-2 rounded-full border px-2 py-0.5 text-xs font-medium shadow-sm {status ===

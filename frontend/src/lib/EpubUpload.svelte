@@ -4,7 +4,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { Upload } from 'lucide-svelte';
-	
+
 	// these are the types I use for books in my app
 	export type BookStatus = 'read' | 'unread' | 'finished';
 	export interface Book {
@@ -16,7 +16,7 @@
 		completion: number;
 		fileUrl: string;
 	}
-	
+
 	// these are the types that come from my backend API
 	interface FileInfo {
 		id: string;
@@ -103,7 +103,7 @@
 			reader.readAsArrayBuffer(file);
 		});
 	}
-	
+
 	// load existing books when component mounts
 	onMount(async () => {
 		console.log('DEBUG: EpubUpload component mounting');
@@ -131,7 +131,7 @@
 					id: meta.id,
 					title: meta.title,
 					author: meta.author,
-					image: meta.coverUrl || '/default.webp',
+					image: meta.coverUrl || '/candle.webp',
 					status: 'unread',
 					completion: 0,
 					fileUrl: url
@@ -182,7 +182,7 @@
 				id: meta.id,
 				title: meta.title,
 				author: meta.author,
-				image: meta.coverUrl || '/default.webp',
+				image: meta.coverUrl || '/candle.webp',
 				status: 'unread',
 				completion: 0,
 				fileUrl

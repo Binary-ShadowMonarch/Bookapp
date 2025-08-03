@@ -318,13 +318,13 @@ func (s *Service) Logout(mail string) error {
 // Authorize parses and verifies the Bearer token or access_token cookie.
 // Authorize extracts and validates the JWT token from a request
 // this is used by middleware to check if a user is logged in
-// it looks for the token in either the Authorization header or a cookie
+// it looks for the token in either the Authorization header or a cookie(for sveltekit integration)
 func (s *Service) Authorize(r *http.Request) (string, error) {
 	log.Printf("DEBUG: Authorizing request: %s %s", r.Method, r.URL.Path)
 	var token string
 
 	// first, try to get the token from the Authorization header
-	// this is the standard way APIs handle authentication
+	// found this is the standard way APIs handle authentication
 	authHeader := r.Header.Get("Authorization")
 	parts := strings.SplitN(authHeader, " ", 2)
 	if len(parts) == 2 && parts[0] == "Bearer" {
@@ -332,7 +332,7 @@ func (s *Service) Authorize(r *http.Request) (string, error) {
 		log.Printf("DEBUG: Found token in Authorization header")
 	} else {
 		// if no Authorization header, try to get the token from a cookie
-		// this is useful for web applications
+		// this is useful for web applications(browser cookie)
 		cookie, err := r.Cookie("access_token")
 		if err != nil {
 			log.Printf("DEBUG: No token found in header or cookie")

@@ -146,7 +146,7 @@
 						id: fileInfo.id,
 						title: meta.title,
 						author: meta.author,
-						image: meta.coverUrl || '/default.webp',
+						image: meta.coverUrl || '/candle.webp',
 						status:
 							progressData.completion === 100
 								? 'finished'
