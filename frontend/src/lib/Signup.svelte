@@ -33,12 +33,12 @@
 
 	// warn users before they leave if they've started filling out the form
 	onMount(() => {
-		console.log('DEBUG: Signup component mounted');
+		// console.log('DEBUG: Signup component mounted');
 		hasNavigated = false;
 
 		const handleBeforeUnload = (e: BeforeUnloadEvent) => {
 			if (mail || password) {
-				console.log('DEBUG: User trying to leave with unsaved data');
+				console.warn('DEBUG: User trying to leave with unsaved data');
 				e.preventDefault();
 				return '';
 			}
@@ -53,7 +53,7 @@
 
 	// toggle password visibility for better UX
 	function togglePassword() {
-		console.log('DEBUG: Toggling password visibility');
+		// console.log('DEBUG: Toggling password visibility');
 		showPassword = !showPassword;
 	}
 </script>
@@ -85,13 +85,13 @@
 			<form
 				method="POST"
 				use:enhance={() => {
-					console.log('DEBUG: Form submission started');
+					// console.log('DEBUG: Form submission started');
 					isSubmitting = true;
 					hasNavigated = true;
 					return async ({ update }) => {
 						await update();
 						isSubmitting = false;
-						console.log('DEBUG: Form submission completed');
+						// console.log('DEBUG: Form submission completed');
 					};
 				}}
 			>

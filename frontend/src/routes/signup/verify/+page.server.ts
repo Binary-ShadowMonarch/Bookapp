@@ -72,7 +72,7 @@ export const actions: Actions = {
         }
 
         try {
-            console.log(mail)
+            // console.log(mail)
             const res = await fetch('/api/signup/resend', {
                 method: 'POST',
 

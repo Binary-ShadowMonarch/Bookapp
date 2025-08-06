@@ -1,10 +1,9 @@
 package auth
 
 import (
-	"bookapp/internal/models" // or "bookapp/internal/models" per your module
+	"bookapp/internal/models"
 	"bookapp/internal/store"
 
-	// or "bookapp/internal/models" per your module
 	"context"
 	"errors" // for ErrInvalidCredentials,ErrUnauthorized, errors.New
 	"fmt"
@@ -31,7 +30,7 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-// these are the error messages I return when something goes wrong
+// these are the error messages functions return when something goes wrong
 // I use these to tell the frontend what happened
 var ErrInvalidCredentials = errors.New("invalid credentials")
 var ErrUnauthorized = errors.New("unauthorized")
@@ -43,10 +42,10 @@ var ErrUserNotFound = errors.New("user not found")
 type UserStore interface {
 	Create(*models.User) error
 	FindByEmail(string) (*models.User, error)
-	FindByID(int) (*models.User, error) // Add this
+	FindByID(int) (*models.User, error)
 	Update(*models.User) error
 
-	// Add these for refresh tokens
+	//  for refresh tokens
 	SaveRefreshToken(token string, userID int, expiresAt time.Time) error
 	DeleteRefreshToken(token string) error
 	FindRefreshToken(token string) (int, error)
@@ -58,7 +57,8 @@ type UserStore interface {
 }
 
 // Service contains all my authentication and file storage logic
-// this is the main service that handles login, registration, file uploads, etc.
+// this is the main service that handles login, registration, file uploads, and any other features Implement later
+// NOTE: check out for new file for helper functions this file is getting larger
 type Service struct {
 	store             UserStore
 	minio             *minio.Client
@@ -72,8 +72,8 @@ func NewService(us UserStore) *Service {
 	log.Println("DEBUG: Initializing auth service")
 
 	// set up MinIO client for file storage
-	// MinIO is like AWS S3 but I can run it locally
-	endpoint := os.Getenv("MINIO_ENDPOINT") // e.g. "play.min.io:9000"
+	// MinIO is like AWS S3 but I can run it locally and has official go sdk
+	endpoint := os.Getenv("MINIO_ENDPOINT") //  "localhost:9000"
 	accessKey := os.Getenv("MINIO_ACCESS_KEY")
 	secretKey := os.Getenv("MINIO_SECRET_KEY")
 
@@ -112,7 +112,7 @@ func NewService(us UserStore) *Service {
 }
 
 // RequestVerification handles the first step of user registration
-// this sends a verification email with a code to confirm the user's email address
+// this saves(mail and code) and sends a verification email with a code to confirm the user's email address
 func (s *Service) RequestVerification(email, password string) error {
 	log.Printf("DEBUG: Requesting verification for email: %s", email)
 
@@ -168,6 +168,8 @@ func (s *Service) RequestVerification(email, password string) error {
 	return s.sendVerificationEmail(email, code)
 }
 
+// ////////
+// //////// This is previous version before implementing the google, it is just here for me to look at it 🤣
 // func (s *Service) VerifyCode(email, code string) error {
 // 	hashed, err := s.store.GetVerification(email, code)
 // 	if err != nil {

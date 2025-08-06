@@ -17,7 +17,7 @@
 	type Mode = (typeof modes)[number];
 
 	interface Book {
-		id: string; // Ensure this is a stable, unique ID from your backend
+		id: string; // Ensure this is a stable, unique ID from backend
 		title: string;
 		author: string;
 		image: string;

@@ -48,7 +48,7 @@
 		author: string;
 		coverUrl: string | null;
 	}> {
-		console.log('DEBUG: Parsing EPUB metadata for:', file.name);
+		// console.log('DEBUG: Parsing EPUB metadata for:', file.name);
 		return new Promise((resolve, reject) => {
 			const reader = new FileReader();
 			reader.onload = async (e) => {
@@ -92,7 +92,7 @@
 						// no cover available, will use default
 					}
 
-					console.log('DEBUG: EPUB metadata extracted:', meta);
+					// console.log('DEBUG: EPUB metadata extracted:', meta);
 					resolve(meta);
 				} catch (err) {
 					console.error('DEBUG: Error parsing EPUB metadata:', err);

@@ -20,15 +20,15 @@ self.onmessage = async (event: MessageEvent) => {
     const { file }: { file: File } = event.data;
 
     try {
-        console.log('DEBUG: Worker received file for parsing:', file.name);
-        
+        // console.log('DEBUG: Worker received file for parsing:', file.name);
+
         // create a cache key from file size and name
         // this helps identify if we've parsed this exact file before
         const cacheKey = `${file.name}-${file.size}`;
 
         // check if we've already parsed this file
         if (bookCache.has(cacheKey)) {
-            console.log('DEBUG: Found cached metadata for:', file.name);
+            // console.log('DEBUG: Found cached metadata for:', file.name);
             self.postMessage({
                 success: true,
                 payload: bookCache.get(cacheKey)
@@ -63,9 +63,9 @@ self.onmessage = async (event: MessageEvent) => {
             );
             const coverUrl = await Promise.race([coverPromise, timeoutPromise]) as string;
             bookMeta.coverUrl = coverUrl;
-            console.log('DEBUG: Successfully extracted cover for:', file.name);
+            // console.log('DEBUG: Successfully extracted cover for:', file.name);
         } catch {
-            console.log('DEBUG: No cover found or timeout for:', file.name);
+            // console.log('DEBUG: No cover found or timeout for:', file.name);
             // no cover available or timeout occurred - coverUrl remains null
         }
 
@@ -73,7 +73,7 @@ self.onmessage = async (event: MessageEvent) => {
         bookCache.set(cacheKey, bookMeta);
 
         // send the parsed metadata back to the main thread
-        console.log('DEBUG: Sending parsed metadata for:', file.name);
+        // console.log('DEBUG: Sending parsed metadata for:', file.name);
         self.postMessage({
             success: true,
             payload: bookMeta

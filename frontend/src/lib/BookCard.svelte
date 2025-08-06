@@ -20,7 +20,7 @@
 
 	// when someone clicks to open the book, call the parent's function
 	function openBook() {
-		console.log('DEBUG: Opening book:', id, title);
+		// console.log('DEBUG: Opening book:', id, title);
 		onOpenBook(id, fileUrl);
 	}
 </script>

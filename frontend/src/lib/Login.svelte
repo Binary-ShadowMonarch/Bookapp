@@ -31,7 +31,7 @@
 	// check if the user is already logged in when the page loads
 	// if they are, redirect them to the library
 	async function check() {
-		console.log('DEBUG: Checking if user is already logged in');
+		// console.log('DEBUG: Checking if user is already logged in');
 		try {
 			let res = await fetch('/api/protected/profile', {
 				method: 'GET',
@@ -39,19 +39,19 @@
 			});
 
 			if (res.ok) {
-				console.log('DEBUG: User is already logged in, redirecting to library');
+				// console.log('DEBUG: User is already logged in, redirecting to library');
 				goto('/library');
 				return;
 			}
 			// if the request failed with 401, try to refresh the token
 			if (res.status === 401) {
-				console.log('DEBUG: Token expired, attempting refresh');
+				// console.log('DEBUG: Token expired, attempting refresh');
 				const refresh = await fetch('/api/refresh', {
 					method: 'POST',
 					credentials: 'include'
 				});
 				if (refresh.ok) {
-					console.log('DEBUG: Token refreshed successfully, redirecting to library');
+					// console.log('DEBUG: Token refreshed successfully, redirecting to library');
 					goto('/library');
 					return;
 				}
@@ -68,7 +68,7 @@
 
 	// toggle password visibility
 	function togglePassword() {
-		console.log('DEBUG: Toggling password visibility');
+		// console.log('DEBUG: Toggling password visibility');
 		showPassword = !showPassword;
 	}
 
@@ -78,7 +78,7 @@
 		error = null;
 		isSubmitting = true;
 
-		console.log('DEBUG: Attempting login for:', email);
+		// console.log('DEBUG: Attempting login for:', email);
 
 		try {
 			// send the login request to my backend
@@ -104,10 +104,10 @@
 			}
 
 			// login was successful! redirect to the library
-			console.log('DEBUG: Login successful, redirecting to library');
+			// console.log('DEBUG: Login successful, redirecting to library');
 			goto('/library');
 		} catch (err: any) {
-			console.log('DEBUG: Login failed:', err.message);
+			// console.log('DEBUG: Login failed:', err.message);
 			// handle different types of errors and show appropriate messages
 			if (err.message === 'invalid credentials') {
 				error = 'Invalid credentials. Please check your email and password.';
