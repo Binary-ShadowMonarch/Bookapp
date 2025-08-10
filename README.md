@@ -38,9 +38,8 @@ I went full-stack on this one, which means I probably overcomplicated things but
 
 - `NavBar.svelte` - The navigation bar that stays at the top. Pretty straightforward, but it took me way too long to get the responsive design right, and I have SvelteKit slots here. I can import wherever I need and add different buttons. On the homepage there's a logo on the left, nothing in the center, and login/signup on the right. On the library page, it's the same navbar but with search in the center and upload/store on the right with a user icon on the far right. I can toggle the additional view that has filter purposes on the library page but it's hidden on the homepage - could say it's just a sticky black acrylic background with button/elements placeholders.
 
-- `Login.svelte` & `Signup.svelte` - The authentication pages. I added some nice animations and validation because users deserve better than "invalid input" errors. The errors are as helpful as they could be. The signup process asks for email and 8 character password, and sends form (email and password) to backend route /api/register/request( anything with /api would be forwarded to localhost:8080 by nginx) and it responds with ok then the signup page redirects user to /signup/verify page where they enter the 6 digit pin. This submits pin to /api/register/verify - the pin will be sent to their provided email using SendGrid API service. The backend saves the code in db(email_verifications table). The /api/register/verify expects mail and code, and checks for the code and mail match in email_verification table, and if matched, creates user and minio bucket then redirects to success page, where user can go to login or home page.
-
-The pages /signup/verify and signup/success are one time pages for signup only and cannot be visited as Svelte guards it with tokens. The token "pending" is set by signup page, and verify page checks for that, extracts mail from URL and deletes that token so if user reloads the page or tries to access that page without signup redirection, they will be redirected to signup page and after the successful verification, it creates another token "registered" and redirects to /signup/success page, it checks for the registered token deletes and deletes it.
+- `Login.svelte` & `Signup.svelte` - The authentication pages. I added some nice animations and validation because users deserve better than "invalid input" errors. The errors are as helpful as they could be. The signup process asks for email and 8 character password, and sends form (email and password) to backend route /api/register/request( anything with /api would be forwarded to localhost:8080 by nginx) and it responds with ok then the signup page redirects user to /signup/verify page where they enter the 6 digit pin. This submits pin to /api/register/verify - the pin will be sent to their provided email using SendGrid API service. The backend saves the code in db(email_verifications table). The /api/register/verify expects mail and code, and checks for the code and mail match in email_verification table, and if matched, creates user and minio bucket then redirects to success page, where user can go to login or home page. 
+The pages /signup/verify and signup/success are one time pages for signup only and cannot be visited as Svelte guards it with tokens. The token "pending" is set by signup page, and verify page checks for that, extracts mail from URL and deletes that token so if user reloads the page or tries to access that page without signup redirection, they will be redirected to signup page and after the successful verification, it creates another token "registered" and redirects to /signup/success page, it checks for the registered token shows the page and deletes it.
 
 - `BookCard.svelte` - Each book gets its own card with a cover image, title, author, and reading progress. I'm pretty proud of the hover effects on this one. And upon hover it shows open button that opens the reader. I load this on page load with all the books fetched and parsed from /api/protected/library. This returns file URLs and EPUB.js parses it. If there is no provided cover, I have one for default, a burning candle.
 
@@ -143,7 +142,7 @@ I wanted S3-compatible storage for reliable backup for the future just in case. 
 
 ### Authentication Flow - The Biggest Headache
 
-This was probably the hardest part. I struggled the most with understanding how SvelteKit server-side, frontend (client browser), and backend communication worked with tokens. The issue was with refresh tokens - SvelteKit server would request a refresh from the backend, but the browser had no idea the refresh token was used (and I delete used refresh tokens). I almost removed the refresh token implementation entirely, but decided to integrate everything to the frontend (client browser) instead. Not sure how secure this is, but it works.
+This was probably the hardest part. I struggled the most with understanding how SvelteKit server-side, frontend (client browser), and backend communication worked with tokens. The issue was with refresh tokens - SvelteKit server would request a refresh from the backend, but the browser had no idea the refresh token was used (and I delete used refresh tokens). I almost removed the refresh token implementation entirely because I wanted to make the sveltekit only to request from backend and not expose backend to internet, but decided to integrate everything to the frontend (client browser) instead. Not sure how secure this is, but it works.
 
 ### EPUB Parsing
 
@@ -151,7 +150,7 @@ Getting EPUB.js to work properly was challenging. The documentation is sparse, a
 
 ### Theme Switching Issues
 
-When implementing smooth scrolling, I broke the dark mode on EPUB.js. The issue was that it would only change theme once loaded and on scroll to next page (that was EPUB rendering and I was applying theme on rendition after registering theme). This happened like fix one thing and another was broke and it took me a while to figure out. Here is my actual commit message:
+When implementing smooth scrolling, I broke the dark mode on EPUB.js. The issue was that it would only change theme once loaded and on scroll to next page (that was EPUB rendering and I was applying theme on rendition after registering theme). This happened more times than I like to admit, fix one thing and another was broke and it took me a while to figure out. Here is my actual commit message:
 
 ```
 󰣇 ~/Documents/Final project  master  !? ❯ git checkout
@@ -174,13 +173,13 @@ Getting all the services to work together in Docker was like herding cats. Had t
 
 This project taught me a lot about full-stack development, containerization, and building a real application that people might actually use. I learned about:
 
-- **Web Workers and background processing** - Never knew I could detect clients' CPU cores and use web workers to do stuff on my clients' browser. Not sure how it affects UX like opening multiple browser tabs, I use all cores for parsing. I create workers based on how many logical cores are available (pretty sure browser should handle and make available/claim back resources used by my workers/parser).
+- **Web Workers and background processing** - Never knew I could detect clients' CPU cores and use web workers to do stuff on my clients' browser. Not sure how it affects UX, when opening multiple browser tabs, I use all cores for parsing. I create workers based on how many logical cores are available (pretty sure browser should handle and make available/claim back resources used by my workers/parser).
 
 - **JWT authentication and security best practices** - Like session-based and JSON web tokens (how I get automatically logged in on sites I visit like Notion - I get it now)
 
 - **Docker orchestration and microservices** - Honestly I still don't get it fully and it barely works on my current setup, but cool thing was once it worked, it just ran with no hassle when deploying on CloudPanel over on the Ubuntu server, no hiccups. I didn't download/install Node, Go, manually ran any containers, just `git pull` created envs and `docker-compose --env-file ./.env up --build -d` just worked!
 
-- **GitHub** - My project is a private repository, and when I push new changes, I didn't want to manually download zip, scp my file to Ubuntu server and then run docker-compose. But I didn't have to, I created a deploy key for my repository with read access, and set it up on Ubuntu server to use it, then I can now just do `git pull` to pull latest changes once cloned! Pretty awesome right? I also have a deploy.sh that just does this for me when I do ./deploy.sh.
+- **GitHub** - My project is a private repository, and when I push new changes, I didn't want to manually download zip, scp my file to Ubuntu server and then run docker-compose. But I didn't have to, I created a deploy key for my repository with read access, and set it up on Ubuntu server to use it, then I can now just do `git pull` to pull latest changes once cloned! Pretty awesome right? I also have bash script called deploy.sh that just does this for me when I do ./deploy.sh.
 
 - **EPUB file format and parsing** - I thought .epub was file type like .jpg for image, turned out it's an archive style, with structure and multiple files, like HTML/XHTML, CSS, fonts inside. I didn't know there could be images inside .epub files.
 
@@ -194,12 +193,12 @@ At one point, I looked at my app and realized the majority of my efforts were in
 
 ### Testing and Development Tools
 
-I mostly used curl and scripts for testing the backend (like the `checker.sh` script in the backend folder), but I discovered Postman and it's actually pretty useful for testing API endpoints. I also learned to appreciate Git more after losing 6 hours of work to VSCode crashing (auto save on no errors was on but Svelte component was screaming because of unused CSS selector and didn't save and my laptop doesn't hold power, just shuts off on power outage). Now I stage changes regularly and commit frequently. Also almost screwed up with Git as well because I used to checkout my previous commits frequently with `git checkout` but before this I knew `git reset --hard "head"` thinking I can come back to this but it was gone, thankfully it was not much that was lost. I also feel why documentation and logging is important, I don't have one and I forget why was that there, and the only message I can look up for now is comments and commit messages. I'll be implementing a bit more detailed documentation for this project later on.
+I mostly used curl and scripts for testing the backend (like the `checker.sh` script in the backend folder), but I discovered Postman and it's actually pretty useful for testing API endpoints. I also learned to appreciate Git more after losing 6 hours of work to VSCode crashing (auto save on no errors was on but Svelte component was screaming because of unused CSS selector and didn't save and my laptop doesn't hold power, just shuts off on power outage). Now I stage changes regularly and commit frequently. Also almost screwed up with Git as well because I used to checkout my previous commits frequently with `git checkout` but before this I knew `git reset --hard "head"` thinking I can come back to this but it was gone, thankfully it was not much that was lost. I also feel why documentation and logging is important, I don't have one and I forget why was that there(even in fairly small project like mine), and the only message I can look up for now is comments and commit messages. I'll be implementing a bit more detailed documentation for this project later on.
 
-## Future Improvements (If I Ever Get Around to It)
+## Future Improvements (I Look forward to)
 
 - Add support for other book formats (PDF, MOBI) - My dad said he would use an app like this to add his books (Nepali, Hindi, and Sanskrit) as he likes to read stories and poems (Ramayana, Puranas). I might need to add conversion or accept more formats.
-- Forgot password functionality (this is my first on list)
+- Forgot password functionality (Top priority)
 - Delete books feature
 - Add language options and natural sounding text to speech (as requested by my first client - my dad)
 - Implement book recommendations
@@ -207,15 +206,15 @@ I mostly used curl and scripts for testing the backend (like the `checker.sh` sc
 - Add reading statistics and analytics
 - Implement offline reading support as a PWA (progressive web application, that popup to install it as an app to use it offline)
 - Page flipping animations for paginated view
-- Global EPUB store (though I have no idea how to implement this legally - I don't want to illegally distribute authors' work, only books that authors themselves made available for free)
+- Global EPUB store (though I have no idea how to implement this legally - I don't want to illegally distribute authors' work, only books that authors themselves made available to read for free)
 
 ## How to Run This Thing
 
-1. Open .env_template and fill in your configuration (as per the names)
+1. Get the source file and Open .env_template then fill in your configuration and save it as .env (as per the names)
 2. Run `docker-compose --env-file ./.env up --build -d`
 3. Visit `http://localhost:4353`
 
-The setup is pretty straightforward thanks to Docker, but you'll need to configure Google OAuth (authorized JS origin, callbacks and redirect URLs) and SendGrid (specifically) for email verification if you want all the features to work.
+The setup is pretty straightforward thanks to Docker, but you'll need to configure Google OAuth (authorized JS origin, callbacks and redirect URLs) and SendGrid (for local accounts) for email verification if you want all the features to work.
 
 ## Deployment
 
@@ -239,7 +238,7 @@ I used Linux as daily driver for long time, and handling issues and fixing stuff
 
 I've found YouTube creators incredibly helpful. Huge thanks to the creators who kept me sane during development - Christian Lempa (nginx/proxy), NetworkChuck (Docker/Portainer, SSH, bash, IP addresses), Fireship (for 5 years of experience per topic in 100 seconds 🤣), Primeagen, Low Level, Consulting Ninja (first Go auth backend implementation), Bro Code (initial days of CS50x concepts on C), and many others. The open-source community, especially SvelteKit's Discord, has been amazing.
 
-If you're reading this, thanks for checking out my project! Feel free to steal any ideas, give suggestions and stuff (this repo is private for now).
+If you're reading this, thanks for checking out my project! Feel free to steal any ideas, give suggestions and stuff (Github repo is private for now).
 
 ## Enjoy some memes
 
@@ -250,3 +249,4 @@ If you're reading this, thanks for checking out my project! Feel free to steal a
 ![Meme 3](./assets/250731_14h54m51s_screenshot.png "Memes")
 
 ![Meme 4](./assets/250731_14h55m53s_screenshot.png "Memes")
+
