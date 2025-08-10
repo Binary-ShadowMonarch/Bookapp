@@ -210,7 +210,7 @@ I mostly used curl and scripts for testing the backend (like the `checker.sh` sc
 
 ## How to Run This Thing
 
-1. Get the source file and Open .env_template then fill in your configuration and save it as .env (as per the names)
+1. Get the source file and Open .env_template then fill in your configuration(as per the names) and save it as .env 
 2. Run `docker-compose --env-file ./.env up --build -d`
 3. Visit `http://localhost:4353`
 
