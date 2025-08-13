@@ -674,7 +674,6 @@ func (s *Service) Login(mail, password string) (accessToken, refreshToken string
 	return s.issueAndSaveTokens(u)
 }
 
-// And finally, modify the VerifyCode function to use the bucket creation helper
 func (s *Service) VerifyCode(email, code string) error {
 	hashed, err := s.store.GetVerification(email, code)
 	if err != nil {
