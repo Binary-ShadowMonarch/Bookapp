@@ -1,6 +1,6 @@
 # Books - Your Personal Digital Library
 
-#### Video Demo: <URL HERE>
+#### Video Demo: [Youtube](https://youtu.be/6p8K6DyKgzk)
 
 #### Description:
 
@@ -57,7 +57,7 @@ The pages /signup/verify and signup/success are one time pages for signup only a
 
 - `login.go` & `google.go` - Handle authentication. The Google OAuth flow was surprisingly straightforward once I figured out the redirect URLs. Both the login and Google login will issue two HTTP-only tokens on successful login. One is Access token and other is refresh token. Access token gives access to protected routes such as /api/library checked by jwt.go in middleware. The unprotected routes are not wrapped in JWT middleware in routes.go. The refresh token just refreshes tokens, deleting previous refresh token and issuing new set of tokens.
 
-- `library.go` - Manages the book library, file operations, and user permissions. Users can only access their own books.
+- `library.go` - Manages the book library, file operations, and user permissions. Users can only access their own books. There are some empty/dummy functions as well for future features I plan to implement.
 
 - `upload.go` - Handles file uploads to MinIO. I added proper validation and error handling because users will upload anything.
 
