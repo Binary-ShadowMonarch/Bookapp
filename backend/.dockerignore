@@ -1,0 +1,13 @@
+.git
+.gitignore
+.vscode
+.env
+.env.*
+main
+cookies.txt
+jar.txt
+checker.sh
+mailtest.sh
+test.sh
+testall.sh
+*.log

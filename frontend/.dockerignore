@@ -1,0 +1,13 @@
+node_modules
+.svelte-kit
+build
+coverage
+playwright-report
+test-results
+.pnpm-store
+.vscode
+.git
+.gitignore
+.env
+.env.*
+*.log

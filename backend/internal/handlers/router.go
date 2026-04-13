@@ -13,7 +13,7 @@ import (
 // think of it as the traffic controller for all incoming requests
 func NewRouter(svc *auth.Service) http.Handler {
 	log.Println("DEBUG: Setting up router - this is where all the magic happens")
-	
+
 	mux := http.NewServeMux()
 
 	// all my API routes go under /api prefix to keep things organized
@@ -23,6 +23,7 @@ func NewRouter(svc *auth.Service) http.Handler {
 	// these are the public routes anyone can access (no login needed)
 	// registration and login stuff basically
 	log.Println("DEBUG: Setting up public routes (registration, login, etc.)")
+	api.Handle("/healthz", middleware.CORS(HealthHandler()))
 	api.Handle("/register/request", middleware.CORS(RequestVerifyHandler(svc)))
 	api.Handle("/register/verify", middleware.CORS(VerifyHandler(svc)))
 	api.Handle("/login", middleware.CORS(LoginHandler(svc)))

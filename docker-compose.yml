@@ -64,7 +64,7 @@ services:
 
   # PostgreSQL Database Service
   db:
-    image: postgres:latest
+    image: postgres:15
     container_name: bookapp-db
     restart: always
     environment:
@@ -73,11 +73,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       # Mounts a named volume to the standard postgres data directory
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/
       # Mounts the init script to run on first launch
       - ./db-init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -135,7 +135,6 @@ services:
 volumes:
   pgdata:
   minio_data:
-
 
 networks:
   internal:

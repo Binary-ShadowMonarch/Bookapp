@@ -222,6 +222,58 @@ I deployed this on Oracle Cloud Free Tier with Ubuntu server and CloudPanel whic
 
 [books.saurabpoudel.com.np](https://books.saurabpoudel.com.np/)
 
+## CI/CD (GitHub Actions)
+
+This repository now includes a GitHub Actions pipeline for CI and CD:
+
+GHCR note: you do not need a separate GHCR account; GHCR uses your existing GitHub account/organization.
+
+- `.github/workflows/ci.yml`
+    - Runs on `pull_request` and `push`
+    - Frontend checks: install, lint, type-check, unit test, build
+    - Backend checks: `go build` and `go vet`
+    - Docker smoke builds for frontend and backend images
+
+- `.github/workflows/cd.yml`
+    - Auto deploy runs only after CI succeeds on `main` via `workflow_run`
+    - Manual runs supported through `workflow_dispatch`
+    - Supports rollback mode with an explicit image tag
+    - Builds and pushes images to GHCR:
+        - `ghcr.io/<owner>/bookapp-frontend`
+        - `ghcr.io/<owner>/bookapp-backend`
+    - Deploys on a self-hosted Linux runner with label `bookapp-prod`
+
+- `docker-compose.prod.yml`
+    - Production override that switches frontend/backend to GHCR images
+
+### One-time setup for CD
+
+1. Install and register a self-hosted GitHub runner on your Ubuntu server.
+2. Add the runner label `bookapp-prod` and ensure only your production runner has that label.
+3. Ensure the runner user can run Docker commands (for example, in the `docker` group).
+4. Keep your production env file on the server (example: `/opt/bookapp/.env`) with the same keys used by this project.
+5. In GitHub repository settings, add Actions variables:
+     - `BOOKAPP_ENV_FILE` = absolute path to the server env file (example: `/opt/bookapp/.env`)
+     - `BOOKAPP_SMOKE_URL` = optional frontend smoke URL (default: `http://127.0.0.1:4353/`)
+     - `BOOKAPP_API_SMOKE_URL` = optional backend smoke URL (default: `http://127.0.0.1:4353/api/healthz`)
+6. Enable branch protection on `main` and require the CI checks from `.github/workflows/ci.yml` before merge.
+7. Merge changes to `main` to trigger automated CD.
+
+Deployment command used by the workflow:
+
+```bash
+docker compose --env-file "$BOOKAPP_ENV_FILE" -f docker-compose.yml -f docker-compose.prod.yml up -d --no-build
+```
+
+### Rollback
+
+1. Open GitHub Actions and run the `CD` workflow manually.
+2. Set `deploy_mode` to `rollback`.
+3. Set `rollback_tag` to a known-good image tag (for example, a previous commit SHA tag).
+4. Run the workflow.
+
+The deployment will skip image build, pull the selected tag, redeploy the stack, and run smoke checks.
+
 ## Final Thoughts
 
 Building this was a lot of fun, even though it took way longer than I expected (I started on 5th July 2025). There's something satisfying about creating a tool that you'd actually want to use yourself. The code is probably not perfect (what code ever is?), but it works, it's secure (as best of my knowledge), and it doesn't make me want to throw my computer out the window (because I couldn't hit X on ads Microsoft).
