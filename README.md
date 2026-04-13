@@ -245,6 +245,7 @@ GHCR note: you do not need a separate GHCR account; GHCR uses your existing GitH
 
 - `docker-compose.prod.yml`
     - Production override that switches frontend/backend to GHCR images
+    - Production backup service writes to a Docker named volume (`db_backups`) instead of the repository `./backups` folder
 
 ### One-time setup for CD
 
@@ -258,6 +259,8 @@ GHCR note: you do not need a separate GHCR account; GHCR uses your existing GitH
     - `BOOKAPP_API_SMOKE_URL` = optional backend smoke URL (default: `http://localhost:4353/api/healthz`)
 6. Enable branch protection on your default branch (`master`) and require the CI checks from `.github/workflows/ci.yml` before merge.
 7. Merge changes to your default branch (`master`) to trigger automated CD.
+
+Note: CD checkout on the self-hosted runner is configured with `clean: false` to avoid failures from leftover root-owned files in persistent workspaces.
 
 Deployment command used by the workflow:
 

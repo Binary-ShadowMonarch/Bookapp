@@ -4,3 +4,10 @@ services:
 
   backend:
     image: ghcr.io/${GHCR_OWNER}/bookapp-backend:${IMAGE_TAG}
+
+  db-backup:
+    volumes:
+      - db_backups:/backups
+
+volumes:
+  db_backups:
