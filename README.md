@@ -238,7 +238,7 @@ GHCR note: you do not need a separate GHCR account; GHCR uses your existing GitH
     - Auto deploy runs only after CI succeeds on the default branch (`master` in this repo; `main` also supported) via `workflow_run`
     - Manual runs supported through `workflow_dispatch`
     - Supports rollback mode with an explicit image tag
-    - Builds and pushes images to GHCR:
+    - Builds and pushes multi-arch images (`linux/amd64`, `linux/arm64`) to GHCR:
         - `ghcr.io/<owner>/bookapp-frontend`
         - `ghcr.io/<owner>/bookapp-backend`
     - Deploys on a self-hosted Linux runner with label `bookapp-prod`

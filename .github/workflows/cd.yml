@@ -104,6 +104,12 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.source_ref }}
 
+      - name: Setup QEMU
+        if: needs.prepare.outputs.should_build == 'true'
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
+        with:
+          platforms: arm64,amd64
+
       - name: Setup Docker Buildx
         if: needs.prepare.outputs.should_build == 'true'
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
@@ -123,8 +129,11 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           provenance: true
           sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
             ghcr.io/${{ needs.prepare.outputs.ghcr_owner }}/bookapp-frontend:${{ needs.prepare.outputs.image_tag }}
             ghcr.io/${{ needs.prepare.outputs.ghcr_owner }}/bookapp-frontend:latest
@@ -136,11 +145,34 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           provenance: true
           sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
             ghcr.io/${{ needs.prepare.outputs.ghcr_owner }}/bookapp-backend:${{ needs.prepare.outputs.image_tag }}
             ghcr.io/${{ needs.prepare.outputs.ghcr_owner }}/bookapp-backend:latest
+
+      - name: Verify image manifests
+        if: needs.prepare.outputs.should_build == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          frontend_ref="ghcr.io/${{ needs.prepare.outputs.ghcr_owner }}/bookapp-frontend:${{ needs.prepare.outputs.image_tag }}"
+          backend_ref="ghcr.io/${{ needs.prepare.outputs.ghcr_owner }}/bookapp-backend:${{ needs.prepare.outputs.image_tag }}"
+
+          frontend_manifest="$(docker buildx imagetools inspect "$frontend_ref")"
+          backend_manifest="$(docker buildx imagetools inspect "$backend_ref")"
+
+          echo "$frontend_manifest" | grep -q "linux/amd64"
+          echo "$frontend_manifest" | grep -q "linux/arm64"
+
+          echo "$backend_manifest" | grep -q "linux/amd64"
+          echo "$backend_manifest" | grep -q "linux/arm64"
+
+          echo "Verified multi-arch manifests for $frontend_ref and $backend_ref"
 
       - name: Skip image build for rollback
         if: needs.prepare.outputs.should_build != 'true'
