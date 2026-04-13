@@ -94,6 +94,7 @@ jobs:
     if: github.repository == 'Binary-ShadowMonarch/bookapp'
     needs: prepare
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     outputs:
       image_tag: ${{ needs.prepare.outputs.image_tag }}
       ghcr_owner: ${{ needs.prepare.outputs.ghcr_owner }}
@@ -132,8 +133,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           provenance: true
           sbom: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
           tags: |
             ghcr.io/${{ needs.prepare.outputs.ghcr_owner }}/bookapp-frontend:${{ needs.prepare.outputs.image_tag }}
             ghcr.io/${{ needs.prepare.outputs.ghcr_owner }}/bookapp-frontend:latest
@@ -148,8 +149,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           provenance: true
           sbom: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
           tags: |
             ghcr.io/${{ needs.prepare.outputs.ghcr_owner }}/bookapp-backend:${{ needs.prepare.outputs.image_tag }}
             ghcr.io/${{ needs.prepare.outputs.ghcr_owner }}/bookapp-backend:latest
