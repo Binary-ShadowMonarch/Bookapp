@@ -235,7 +235,7 @@ GHCR note: you do not need a separate GHCR account; GHCR uses your existing GitH
     - Docker smoke builds for frontend and backend images
 
 - `.github/workflows/cd.yml`
-    - Auto deploy runs only after CI succeeds on `main` via `workflow_run`
+    - Auto deploy runs only after CI succeeds on the default branch (`master` in this repo; `main` also supported) via `workflow_run`
     - Manual runs supported through `workflow_dispatch`
     - Supports rollback mode with an explicit image tag
     - Builds and pushes images to GHCR:
@@ -256,8 +256,8 @@ GHCR note: you do not need a separate GHCR account; GHCR uses your existing GitH
      - `BOOKAPP_ENV_FILE` = absolute path to the server env file (example: `/opt/bookapp/.env`)
      - `BOOKAPP_SMOKE_URL` = optional frontend smoke URL (default: `http://127.0.0.1:4353/`)
      - `BOOKAPP_API_SMOKE_URL` = optional backend smoke URL (default: `http://127.0.0.1:4353/api/healthz`)
-6. Enable branch protection on `main` and require the CI checks from `.github/workflows/ci.yml` before merge.
-7. Merge changes to `main` to trigger automated CD.
+6. Enable branch protection on your default branch (`master`) and require the CI checks from `.github/workflows/ci.yml` before merge.
+7. Merge changes to your default branch (`master`) to trigger automated CD.
 
 Deployment command used by the workflow:
 
