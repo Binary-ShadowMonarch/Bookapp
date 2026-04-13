@@ -21,7 +21,7 @@ const config = {
 				'frame-ancestors': ['none'],
 				'form-action': ['self'],
 				'upgrade-insecure-requests': true
-			},
+			}
 		}
 	}
 };

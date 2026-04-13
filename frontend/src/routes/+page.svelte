@@ -25,7 +25,7 @@
 		<a class="w-20" href="/login">
 			<button
 				aria-label="Login"
-				class="flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 transition hover:bg-gray-100 dark:text-gray-300 dark:ring-gray-600 dark:hover:bg-gray-800"
+				class="flex cursor-pointer items-center gap-2 rounded-full px-3 py-1.5 text-sm font-semibold text-gray-700 shadow-sm ring-1 ring-gray-300 transition ring-inset hover:bg-gray-100 dark:text-gray-300 dark:ring-gray-600 dark:hover:bg-gray-800"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -83,7 +83,7 @@
 			<div class=" ">
 				<!-- main headline with gradient text effect -->
 				<h1
-					class="mb-6 text-6xl font-bold leading-tight text-gray-900 sm:text-4xl lg:text-7xl dark:text-white"
+					class="mb-6 text-6xl leading-tight font-bold text-gray-900 sm:text-4xl lg:text-7xl dark:text-white"
 				>
 					Your Digital <span class="gradient-text">Library</span> Awaits
 				</h1>
@@ -116,9 +116,9 @@
 					class="floating-card book-3d relative mx-auto h-40 w-32 overflow-hidden rounded-lg bg-gradient-to-br from-blue-400 to-purple-500 shadow-xl"
 				>
 					<div class="absolute inset-2 rounded-lg bg-white/10"></div>
-					<div class="absolute bottom-4 left-4 right-4 h-1 rounded-full bg-white/20"></div>
-					<div class="absolute bottom-7 left-4 right-4 h-1 rounded-full bg-white/20"></div>
-					<div class="absolute bottom-10 left-4 right-4 h-1 rounded-full bg-white/20"></div>
+					<div class="absolute right-4 bottom-4 left-4 h-1 rounded-full bg-white/20"></div>
+					<div class="absolute right-4 bottom-7 left-4 h-1 rounded-full bg-white/20"></div>
+					<div class="absolute right-4 bottom-10 left-4 h-1 rounded-full bg-white/20"></div>
 				</div>
 				<div class="pointer-events-none absolute inset-0 flex items-center justify-center">
 					<div class="h-64 w-64 animate-pulse rounded-full bg-blue-500/10"></div>

@@ -126,7 +126,7 @@
 </script>
 
 <form class="form" on:submit|preventDefault={handleSubmit}>
-	<div class="flex select-none justify-center text-lg font-bold text-gray-900 dark:text-gray-100">
+	<div class="flex justify-center text-lg font-bold text-gray-900 select-none dark:text-gray-100">
 		<a href="/" class="flex items-center gap-2" aria-label="Homepage">
 			<div
 				class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-400 to-purple-500"

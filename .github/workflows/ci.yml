@@ -44,7 +44,7 @@ jobs:
         run: pnpm check
 
       - name: Unit tests
-        run: pnpm test -- --passWithNoTests
+        run: pnpm test
 
       - name: Build
         run: pnpm build

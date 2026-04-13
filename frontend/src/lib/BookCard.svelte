@@ -28,7 +28,7 @@
 <!-- the main book card container -->
 <!-- it has a nice hover effect and works in both light and dark mode -->
 <div
-	class="group relative flex aspect-[2/3] min-w-[140px] max-w-[180px] cursor-pointer flex-col justify-end overflow-hidden rounded-2xl bg-white/60 shadow-lg backdrop-blur-md transition-transform hover:scale-105 sm:min-w-[160px] sm:max-w-[220px] md:min-w-[180px] md:max-w-[240px] lg:min-w-[200px] lg:max-w-[260px] dark:bg-black/40"
+	class="group relative flex aspect-[2/3] max-w-[180px] min-w-[140px] cursor-pointer flex-col justify-end overflow-hidden rounded-2xl bg-white/60 shadow-lg backdrop-blur-md transition-transform hover:scale-105 sm:max-w-[220px] sm:min-w-[160px] md:max-w-[240px] md:min-w-[180px] lg:max-w-[260px] lg:min-w-[200px] dark:bg-black/40"
 >
 	<!-- the book cover image -->
 	<!-- it fills the entire card and gets slightly darker on hover -->

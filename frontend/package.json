@@ -11,9 +11,10 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
-		"lint": "prettier --check . && eslint .",
-		"test:unit": "vitest",
-		"test": "npm run test:unit -- --run"
+		"lint": "prettier --check .",
+		"lint:strict": "prettier --check . && eslint .",
+		"test:unit": "vitest --config vitest.config.ts",
+		"test": "pnpm test:unit --run"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
