@@ -247,14 +247,68 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          frontend_url="${FRONTEND_SMOKE_URL:-http://127.0.0.1:4353/}"
-          backend_url="${BACKEND_SMOKE_URL:-http://127.0.0.1:4353/api/healthz}"
+          frontend_url="${FRONTEND_SMOKE_URL:-http://localhost:4353/}"
+          backend_url="${BACKEND_SMOKE_URL:-http://localhost:4353/api/healthz}"
 
-          curl --fail --silent --show-error "$frontend_url" > /dev/null
-          echo "Frontend smoke check passed: $frontend_url"
+          check_url() {
+            local name="$1"
+            local url="$2"
+            local attempt
+            local curl_extra=()
 
-          curl --fail --silent --show-error "$backend_url" > /dev/null
-          echo "Backend smoke check passed: $backend_url"
+            if [[ "$url" == http://127.0.0.1:* || "$url" == https://127.0.0.1:* || "$url" == http://localhost:* || "$url" == https://localhost:* ]]; then
+              curl_extra=(-H "Host: localhost")
+            fi
+
+            for attempt in $(seq 1 20); do
+              if curl --fail --silent --show-error --connect-timeout 5 --max-time 10 "${curl_extra[@]}" "$url" > /dev/null; then
+                echo "$name smoke check passed: $url"
+                return 0
+              fi
+
+              echo "$name smoke check attempt $attempt/20 failed, retrying in 3s..."
+              sleep 3
+            done
+
+            echo "$name smoke check failed after retries: $url" >&2
+            return 1
+          }
+
+          check_url "Frontend" "$frontend_url"
+          check_url "Backend" "$backend_url"
+
+      - name: Deployment diagnostics on failure
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+
+          docker compose \
+            --env-file "$COMPOSE_ENV_FILE" \
+            -f docker-compose.yml \
+            -f docker-compose.prod.yml \
+            ps
+
+          echo "----- nginx logs -----"
+          docker compose \
+            --env-file "$COMPOSE_ENV_FILE" \
+            -f docker-compose.yml \
+            -f docker-compose.prod.yml \
+            logs --tail=150 nginx
+
+          echo "----- frontend logs -----"
+          docker compose \
+            --env-file "$COMPOSE_ENV_FILE" \
+            -f docker-compose.yml \
+            -f docker-compose.prod.yml \
+            logs --tail=150 frontend
+
+          echo "----- backend logs -----"
+          docker compose \
+            --env-file "$COMPOSE_ENV_FILE" \
+            -f docker-compose.yml \
+            -f docker-compose.prod.yml \
+            logs --tail=150 backend
 
       - name: Cleanup dangling images
         run: docker image prune -f

@@ -254,8 +254,8 @@ GHCR note: you do not need a separate GHCR account; GHCR uses your existing GitH
 4. Keep your production env file on the server (example: `/opt/bookapp/.env`) with the same keys used by this project.
 5. In GitHub repository settings, add Actions variables:
      - `BOOKAPP_ENV_FILE` = absolute path to the server env file (example: `/opt/bookapp/.env`)
-     - `BOOKAPP_SMOKE_URL` = optional frontend smoke URL (default: `http://127.0.0.1:4353/`)
-     - `BOOKAPP_API_SMOKE_URL` = optional backend smoke URL (default: `http://127.0.0.1:4353/api/healthz`)
+    - `BOOKAPP_SMOKE_URL` = optional frontend smoke URL (default: `http://localhost:4353/`)
+    - `BOOKAPP_API_SMOKE_URL` = optional backend smoke URL (default: `http://localhost:4353/api/healthz`)
 6. Enable branch protection on your default branch (`master`) and require the CI checks from `.github/workflows/ci.yml` before merge.
 7. Merge changes to your default branch (`master`) to trigger automated CD.
 
