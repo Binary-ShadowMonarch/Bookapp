@@ -10,7 +10,7 @@ var allowedOrigins = map[string]bool{
 	"http://localhost:5173":             true,
 	"http://localhost:3000":             true,
 	"http://localhost:4353":             true,
-	"https://books.saurabpoudel.com.np": true,
+	"https://books.saurabp.com.np":      true,
 }
 
 // CORS wraps your handler and enforces origin checks.
