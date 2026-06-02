@@ -202,15 +202,12 @@
 	</button>
 	<div class="flex-col">
 		<p class="p">
-			Don't have an account? <button type="button" class="link-inline"
-				><a href="/signup">Sign Up</a></button
-			>
+			Don't have an account? <a class="link-inline" href="/signup">Sign Up</a>
 		</p>
 
 		<p class="p line">Or Continue Using</p>
 
-		<button type="button" class="btn google">
-			<a class="flex gap-2" aria-label="GoogleAuth" href="/api/auth/google/login">
+			<a class="btn google flex gap-2" aria-label="GoogleAuth" href="/api/auth/google/login">
 				<svg
 					version="1.1"
 					width="20"
@@ -250,7 +247,6 @@
 				</svg>
 				<p>Google</p>
 			</a>
-		</button>
 	</div>
 </form>
 

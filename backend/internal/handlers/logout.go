@@ -33,6 +33,7 @@ func LogoutHandler(svc *auth.Service) http.HandlerFunc {
 		}
 
 		log.Printf("DEBUG: Clearing authentication cookies")
+		secure := secureCookie(r)
 
 		// clear the access token cookie by setting it to expire in the past
 		// this effectively deletes the cookie
@@ -41,7 +42,7 @@ func LogoutHandler(svc *auth.Service) http.HandlerFunc {
 			Value:    "",
 			Expires:  time.Now().UTC().Add(-1 * time.Hour),
 			HttpOnly: true,
-			Secure:   false, // false for logout since we want it to work without HTTPS
+			Secure:   secure,
 			SameSite: http.SameSiteStrictMode,
 			Path:     "/",
 		})
@@ -52,7 +53,7 @@ func LogoutHandler(svc *auth.Service) http.HandlerFunc {
 			Value:    "",
 			Expires:  time.Now().Add(-1 * time.Hour),
 			HttpOnly: true,
-			Secure:   false, // false for logout since we want it to work without HTTPS
+			Secure:   secure,
 			SameSite: http.SameSiteStrictMode,
 			Path:     "/",
 		})

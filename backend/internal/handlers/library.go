@@ -3,8 +3,10 @@ package handlers
 
 import (
 	"bookapp/internal/auth"
+	"bookapp/internal/storage"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -35,7 +37,7 @@ type FileInfo struct {
 func LibraryHandler(svc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("DEBUG: Library request received: %s %s", r.Method, r.URL.Path)
-		
+
 		switch r.Method {
 		case http.MethodGet:
 			handleGetLibrary(svc, w, r)
@@ -50,7 +52,7 @@ func LibraryHandler(svc *auth.Service) http.HandlerFunc {
 // this is the main function that shows someone their personal library
 func handleGetLibrary(svc *auth.Service, w http.ResponseWriter, r *http.Request) {
 	log.Println("DEBUG: Getting library for user")
-	
+
 	// get the user from the JWT token (set by middleware)
 	email, err := svc.Authorize(r)
 	if err != nil {
@@ -69,34 +71,28 @@ func handleGetLibrary(svc *auth.Service, w http.ResponseWriter, r *http.Request)
 
 	log.Printf("DEBUG: Getting files for user ID: %d", user.ID)
 
-	// get all the file URLs from my storage (MinIO)
-	urls, err := svc.ListFiles(context.Background(), user.ID)
+	// get all the file entries from storage
+	objects, err := svc.ListFiles(context.Background(), user.ID)
 	if err != nil {
 		log.Printf("DEBUG: Failed to list files for user %d: %v", user.ID, err)
 		http.Error(w, "could not list files: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("DEBUG: Found %d files for user %d", len(urls), user.ID)
+	log.Printf("DEBUG: Found %d files for user %d", len(objects), user.ID)
 
 	// convert the raw URLs into nice FileInfo objects
-	// I also create proxy URLs so users can't see my MinIO setup
-	files := make([]FileInfo, len(urls))
-	for i, url := range urls {
-		// extract the filename from the MinIO URL
-		parts := strings.Split(url, "/")
-		filename := "unknown"
-		if len(parts) > 0 {
-			filename = parts[len(parts)-1]
-		}
-
-		// create a proxy URL that goes through my server instead of direct MinIO access
-		proxyURL := fmt.Sprintf("/api/protected/files/user-%d/%s", user.ID, filename)
-
+	// I also create proxy URLs so users can't see my storage setup
+	files := make([]FileInfo, len(objects))
+	for i, obj := range objects {
+		filename := obj.Key
+		proxyURL := fmt.Sprintf("/api/protected/files/%s/%s", svc.UserBucketName(user.ID), filename)
 		files[i] = FileInfo{
-			ID:   strconv.Itoa(i), // using index as ID for now, might change later
-			Name: filename,
-			URL:  proxyURL, // this is the URL the frontend will use to read the book
+			ID:       strconv.Itoa(i), // using index as ID for now, might change later
+			Name:     filename,
+			URL:      proxyURL, // this is the URL the frontend will use to read the book
+			Size:     obj.Size,
+			MimeType: obj.ContentType,
 		}
 	}
 
@@ -116,7 +112,7 @@ func handleGetLibrary(svc *auth.Service, w http.ResponseWriter, r *http.Request)
 func FileHandler(svc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("DEBUG: File operation request: %s %s", r.Method, r.URL.Path)
-		
+
 		switch r.Method {
 		case http.MethodDelete:
 			handleDeleteFile(svc, w, r)
@@ -133,12 +129,12 @@ func FileHandler(svc *auth.Service) http.HandlerFunc {
 // they need to be logged in and own the file to delete it
 func handleDeleteFile(svc *auth.Service, w http.ResponseWriter, r *http.Request) {
 	log.Println("DEBUG: Delete file request received")
-	
+
 	// get the file path from the URL
-	path := strings.TrimPrefix(r.URL.Path, "/files/")
-	if path == "" {
-		log.Println("DEBUG: Delete failed - no file ID provided")
-		http.Error(w, "file ID required", http.StatusBadRequest)
+	bucket, objectName, err := parseBucketAndObject(r.URL.Path)
+	if err != nil {
+		log.Printf("DEBUG: Delete failed - invalid file path: %v", err)
+		http.Error(w, "invalid file path", http.StatusBadRequest)
 		return
 	}
 
@@ -158,16 +154,28 @@ func handleDeleteFile(svc *auth.Service, w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	log.Printf("DEBUG: Attempting to delete file %s for user %d", path, user.ID)
+	expectedBucket := svc.UserBucketName(user.ID)
+	if bucket != expectedBucket {
+		log.Printf("DEBUG: Access denied - user %d tried to delete bucket %s", user.ID, bucket)
+		http.Error(w, "access denied", http.StatusForbidden)
+		return
+	}
+	if err := svc.ValidateObjectName(objectName); err != nil {
+		log.Printf("DEBUG: Delete failed - invalid object name: %v", err)
+		http.Error(w, "invalid file path", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("DEBUG: Attempting to delete file %s for user %d", objectName, user.ID)
 
 	// actually delete the file from my storage
-	if err := svc.DeleteFile(context.Background(), user.ID, path); err != nil {
-		log.Printf("DEBUG: Delete failed for user %d, file %s: %v", user.ID, path, err)
+	if err := svc.DeleteFile(context.Background(), user.ID, objectName); err != nil {
+		log.Printf("DEBUG: Delete failed for user %d, file %s: %v", user.ID, objectName, err)
 		http.Error(w, "could not delete file: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("DEBUG: Successfully deleted file %s for user %d", path, user.ID)
+	log.Printf("DEBUG: Successfully deleted file %s for user %d", objectName, user.ID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -175,12 +183,12 @@ func handleDeleteFile(svc *auth.Service, w http.ResponseWriter, r *http.Request)
 // this might be used to show file info before downloading or reading
 func handleGetFile(svc *auth.Service, w http.ResponseWriter, r *http.Request) {
 	log.Println("DEBUG: Get file details request received")
-	
+
 	// get the file path from the URL
-	path := strings.TrimPrefix(r.URL.Path, "/files/")
-	if path == "" {
-		log.Println("DEBUG: Get file failed - no file ID provided")
-		http.Error(w, "file ID required", http.StatusBadRequest)
+	bucket, objectName, err := parseBucketAndObject(r.URL.Path)
+	if err != nil {
+		log.Printf("DEBUG: Get file failed - invalid file path: %v", err)
+		http.Error(w, "invalid file path", http.StatusBadRequest)
 		return
 	}
 
@@ -200,17 +208,29 @@ func handleGetFile(svc *auth.Service, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("DEBUG: Getting file info for %s, user %d", path, user.ID)
+	expectedBucket := svc.UserBucketName(user.ID)
+	if bucket != expectedBucket {
+		log.Printf("DEBUG: Access denied - user %d tried to access bucket %s", user.ID, bucket)
+		http.Error(w, "access denied", http.StatusForbidden)
+		return
+	}
+	if err := svc.ValidateObjectName(objectName); err != nil {
+		log.Printf("DEBUG: Get file failed - invalid object name: %v", err)
+		http.Error(w, "invalid file path", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("DEBUG: Getting file info for %s, user %d", objectName, user.ID)
 
 	// get the file details from my storage
-	fileInfo, err := svc.GetFileInfo(context.Background(), user.ID, path)
+	fileInfo, err := svc.GetFileInfo(context.Background(), user.ID, objectName)
 	if err != nil {
-		log.Printf("DEBUG: File not found: %s for user %d", path, user.ID)
+		log.Printf("DEBUG: File not found: %s for user %d", objectName, user.ID)
 		http.Error(w, "file not found", http.StatusNotFound)
 		return
 	}
 
-	log.Printf("DEBUG: Sending file info for %s", path)
+	log.Printf("DEBUG: Sending file info for %s", objectName)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(fileInfo)
 }
@@ -220,7 +240,7 @@ func handleGetFile(svc *auth.Service, w http.ResponseWriter, r *http.Request) {
 func ListFilesHandler(svc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("DEBUG: List files request received")
-		
+
 		if r.Method != http.MethodGet {
 			log.Printf("DEBUG: List files method not allowed: %s", r.Method)
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -236,7 +256,7 @@ func ListFilesHandler(svc *auth.Service) http.HandlerFunc {
 func ProfileHandler(svc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("DEBUG: Profile request: %s %s", r.Method, r.URL.Path)
-		
+
 		switch r.Method {
 		case http.MethodGet:
 			handleGetProfile(svc, w, r)
@@ -253,7 +273,7 @@ func ProfileHandler(svc *auth.Service) http.HandlerFunc {
 // I only send back safe data, not passwords or sensitive stuff
 func handleGetProfile(svc *auth.Service, w http.ResponseWriter, r *http.Request) {
 	log.Println("DEBUG: Getting user profile")
-	
+
 	// get the user from the JWT token
 	email, err := svc.Authorize(r)
 	if err != nil {
@@ -297,7 +317,7 @@ func handleUpdateProfile(svc *auth.Service, w http.ResponseWriter, r *http.Reque
 func FileProxyHandler(svc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("DEBUG: File proxy request: %s", r.URL.Path)
-		
+
 		// only allow GET requests for file downloads
 		if r.Method != http.MethodGet {
 			log.Printf("DEBUG: File proxy method not allowed: %s", r.Method)
@@ -336,30 +356,64 @@ func FileProxyHandler(svc *auth.Service) http.HandlerFunc {
 
 		// make sure the user is trying to access their own files
 		// this is a security check to prevent accessing other people's books
-		expectedBucket := fmt.Sprintf("user-%d", user.ID)
+		expectedBucket := svc.UserBucketName(user.ID)
 		if bucket != expectedBucket {
 			log.Printf("DEBUG: Access denied - user %d tried to access bucket %s", user.ID, bucket)
 			http.Error(w, "access denied", http.StatusForbidden)
 			return
 		}
+		if err := svc.ValidateObjectName(objectName); err != nil {
+			log.Printf("DEBUG: Invalid object name: %v", err)
+			http.Error(w, "invalid file path", http.StatusBadRequest)
+			return
+		}
 
 		log.Printf("DEBUG: Serving file %s for user %d", objectName, user.ID)
 
-		// get the file stream from my storage (MinIO)
+		// get the file stream from my storage
 		obj, err := svc.GetFileStream(r.Context(), user.ID, objectName)
 		if err != nil {
-			log.Printf("DEBUG: File not found: %s for user %d", objectName, user.ID)
-			http.Error(w, "file not found", http.StatusNotFound)
+			if errors.Is(err, storage.ErrNotFound) {
+				log.Printf("DEBUG: File not found: %s for user %d", objectName, user.ID)
+				http.Error(w, "file not found", http.StatusNotFound)
+				return
+			}
+			log.Printf("DEBUG: File fetch failed: %v", err)
+			http.Error(w, "could not read file", http.StatusInternalServerError)
 			return
 		}
-		defer obj.Close()
+		defer obj.Body.Close()
 
-		// set headers for the file download
-		w.Header().Set("Content-Type", "application/epub+zip")
+		contentType := obj.ContentType
+		if contentType == "" {
+			if strings.HasSuffix(strings.ToLower(objectName), ".epub") {
+				contentType = "application/epub+zip"
+			} else {
+				contentType = "application/octet-stream"
+			}
+		}
+		w.Header().Set("Content-Type", contentType)
+		if obj.Size > 0 {
+			w.Header().Set("Content-Length", strconv.FormatInt(obj.Size, 10))
+		}
 		w.Header().Set("Cache-Control", "private, max-age=3600")
 
 		// stream the file content to the user
 		log.Printf("DEBUG: Streaming file %s to user %d", objectName, user.ID)
-		io.Copy(w, obj)
+		io.Copy(w, obj.Body)
 	}
+}
+
+func parseBucketAndObject(urlPath string) (string, string, error) {
+	trimmed := strings.TrimPrefix(urlPath, "/files/")
+	parts := strings.SplitN(trimmed, "/", 2)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid file path")
+	}
+	bucket := strings.TrimSpace(parts[0])
+	objectName := strings.TrimSpace(parts[1])
+	if bucket == "" || objectName == "" {
+		return "", "", fmt.Errorf("invalid file path")
+	}
+	return bucket, objectName, nil
 }

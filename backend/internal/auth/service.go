@@ -1,7 +1,9 @@
 package auth
 
 import (
+	"bookapp/internal/email"
 	"bookapp/internal/models"
+	"bookapp/internal/storage"
 	"bookapp/internal/store"
 
 	"context"
@@ -15,9 +17,6 @@ import (
 	"strings" // for strings.SplitN
 	"time"
 
-	"github.com/sendgrid/sendgrid-go"
-	"github.com/sendgrid/sendgrid-go/helpers/mail"
-
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/idtoken"
@@ -25,9 +24,6 @@ import (
 	"io"
 	"mime/multipart"
 	"path/filepath"
-
-	"github.com/minio/minio-go/v7" // for minio.Client & IsBucketAlreadyOwnedByYou
-	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 // these are the error messages functions return when something goes wrong
@@ -61,29 +57,33 @@ type UserStore interface {
 // NOTE: check out for new file for helper functions this file is getting larger
 type Service struct {
 	store             UserStore
-	minio             *minio.Client
+	storage           storage.Provider
+	emailSender       email.Sender
 	bucketPref        string
 	googleOAuthConfig *oauth2.Config
 }
 
 // NewService creates a new auth service with all the necessary connections
-// this sets up MinIO for file storage and Google OAuth for login
+// this sets up storage for file handling and Google OAuth for login
 func NewService(us UserStore) *Service {
 	log.Println("DEBUG: Initializing auth service")
 
-	// set up MinIO client for file storage
-	// MinIO is like AWS S3 but I can run it locally and has official go sdk
-	endpoint := os.Getenv("MINIO_ENDPOINT") //  "localhost:9000"
-	accessKey := os.Getenv("MINIO_ACCESS_KEY")
-	secretKey := os.Getenv("MINIO_SECRET_KEY")
-
-	log.Printf("DEBUG: Connecting to MinIO at %s", endpoint)
-	mc, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
-		Secure: false,
+	filerURL := requiredEnv("SEAWEEDFS_FILER_URL")
+	storageProvider, err := storage.NewSeaweedFSFiler(storage.SeaweedFSConfig{
+		FilerURL: filerURL,
+		BasePath: getEnv("SEAWEEDFS_BASE_PATH", "/bookapp"),
 	})
 	if err != nil {
-		log.Fatalf("CRITICAL: Failed to initialize MinIO client: %v", err)
+		log.Fatalf("CRITICAL: Failed to initialize SeaweedFS filer client: %v", err)
+	}
+	log.Printf("DEBUG: Connected to SeaweedFS filer at %s", filerURL)
+
+	emailSender, err := email.NewResendSender(
+		requiredEnv("RESEND_API_KEY"),
+		requiredEnv("RESEND_EMAIL"),
+	)
+	if err != nil {
+		log.Fatalf("CRITICAL: Failed to initialize Resend email sender: %v", err)
 	}
 
 	// set up Google OAuth configuration
@@ -105,8 +105,9 @@ func NewService(us UserStore) *Service {
 	log.Println("DEBUG: Auth service initialization complete")
 	return &Service{
 		store:             us,
-		minio:             mc,
-		bucketPref:        "user-",           // prefix for buckets
+		storage:           storageProvider,
+		emailSender:       emailSender,
+		bucketPref:        "user-",           // prefix for user namespaces
 		googleOAuthConfig: googleOAuthConfig, // store it in the service
 	}
 }
@@ -356,16 +357,7 @@ func (s *Service) Authorize(r *http.Request) (string, error) {
 }
 
 func (s *Service) sendVerificationEmail(to, code string) error {
-	sg := sendgrid.NewSendClient(os.Getenv("SENDGRID_API_KEY"))
-	from := mail.NewEmail("Books App", os.Getenv("SENDGRID_EMAIL"))
-	subject := "Your verification code"
-	toEmail := mail.NewEmail("", to)
-	plainText := fmt.Sprintf("Your code is %s", code)
-	htmlContent := fmt.Sprintf(`<p>Your verification code is <b>%s</b></p>`, code)
-	message := mail.NewSingleEmail(from, subject, toEmail, plainText, htmlContent)
-	_, err := sg.Send(message)
-	// println(os.Getenv("SENDGRID_API_KEY"))
-	return err
+	return s.emailSender.SendVerificationCode(to, code)
 }
 
 // UploadFile uploads a book file to the user's personal storage bucket
@@ -373,22 +365,11 @@ func (s *Service) sendVerificationEmail(to, code string) error {
 func (s *Service) UploadFile(ctx context.Context, userID int, file multipart.File, header *multipart.FileHeader) (string, error) {
 	log.Printf("DEBUG: Uploading file %s for user %d", header.Filename, userID)
 
-	// create the bucket name for this user
-	// each user gets their own bucket to keep their files separate
-	bucket := s.bucketPref + strconv.Itoa(userID)
-
-	// make sure the user's bucket exists, create it if it doesn't
-	exists, err := s.minio.BucketExists(ctx, bucket)
-	if err != nil {
-		log.Printf("DEBUG: Failed to check bucket existence: %v", err)
-		return "", fmt.Errorf("checking bucket existence: %w", err)
-	}
-	if !exists {
-		log.Printf("DEBUG: Creating bucket for user %d", userID)
-		if err := s.minio.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
-			log.Printf("DEBUG: Failed to create bucket: %v", err)
-			return "", fmt.Errorf("making bucket: %w", err)
-		}
+	bucket := s.UserBucketName(userID)
+	scope := storage.UserScope(userID)
+	if err := s.storage.EnsureScope(ctx, scope); err != nil {
+		log.Printf("DEBUG: Failed to ensure user scope: %v", err)
+		return "", err
 	}
 
 	// create a unique filename to avoid conflicts
@@ -398,29 +379,28 @@ func (s *Service) UploadFile(ctx context.Context, userID int, file multipart.Fil
 		time.Now().UTC().UnixNano(),
 		filepath.Ext(header.Filename),
 	)
+	if err := storage.ValidateObjectName(objectName); err != nil {
+		log.Printf("DEBUG: Invalid object name generated: %v", err)
+		return "", err
+	}
 
 	log.Printf("DEBUG: Uploading %s as %s to bucket %s", header.Filename, objectName, bucket)
 
-	// actually upload the file to MinIO
-	info, err := s.minio.PutObject(
+	if err := s.storage.Put(
 		ctx,
-		bucket,
+		scope,
 		objectName,
-		io.LimitReader(file, header.Size), // make sure MinIO knows the file size
+		io.LimitReader(file, header.Size),
 		header.Size,
-		minio.PutObjectOptions{
-			ContentType: header.Header.Get("Content-Type"),
-			// I can set ACL-like permissions via metadata or bucket policy
-		},
-	)
-	if err != nil {
-		log.Printf("DEBUG: Failed to upload file to MinIO: %v", err)
-		return "", fmt.Errorf("uploading to minio: %w", err)
+		header.Header.Get("Content-Type"),
+	); err != nil {
+		log.Printf("DEBUG: Failed to upload file to SeaweedFS: %v", err)
+		return "", fmt.Errorf("uploading to storage: %w", err)
 	}
 
-	// create a URL that goes through my server instead of direct MinIO access
+	// create a URL that goes through my server instead of direct storage access
 	// this gives me control over who can access the files
-	url := fmt.Sprintf("/api/protected/files/%s/%s", bucket, info.Key)
+	url := fmt.Sprintf("/api/protected/files/%s/%s", bucket, objectName)
 	log.Printf("DEBUG: File uploaded successfully, URL: %s", url)
 	return url, nil
 }
@@ -430,56 +410,36 @@ func (s *Service) GetUserByEmail(email string) (*models.User, error) {
 	return s.store.FindByEmail(email)
 }
 
-// ListFiles returns a slice of public URLs for every object
-// in the given user's bucket.
-func (s *Service) ListFiles(ctx context.Context, userID int) ([]string, error) {
-	bucket := s.bucketPref + strconv.Itoa(userID)
-
-	// make sure bucket exists
-	exists, err := s.minio.BucketExists(ctx, bucket)
+// ListFiles returns the objects in the given user's namespace.
+func (s *Service) ListFiles(ctx context.Context, userID int) ([]storage.ObjectInfo, error) {
+	scope := storage.UserScope(userID)
+	objects, err := s.storage.List(ctx, scope)
 	if err != nil {
-		return nil, fmt.Errorf("checking bucket existence: %w", err)
+		return nil, err
 	}
-	if !exists {
-		return nil, nil // no bucket → no files
-	}
-	// List all objects
-	objectCh := s.minio.ListObjects(ctx, bucket, minio.ListObjectsOptions{
-		Recursive: true,
-	})
-
-	var urls []string
-	for obj := range objectCh {
-		if obj.Err != nil {
-			return nil, fmt.Errorf("listing objects: %w", obj.Err)
-		}
-		// build your public URL pattern
-		urls = append(urls, fmt.Sprintf("http://%s/%s/%s",
-			s.minio.EndpointURL().Host,
-			bucket,
-			obj.Key,
-		))
-	}
-	return urls, nil
+	return objects, nil
 }
 
 // DeleteFile removes a file from the user's bucket
 func (s *Service) DeleteFile(ctx context.Context, userID int, fileName string) error {
-	bucket := s.bucketPref + strconv.Itoa(userID)
-
-	return s.minio.RemoveObject(ctx, bucket, fileName, minio.RemoveObjectOptions{})
+	if err := storage.ValidateObjectName(fileName); err != nil {
+		return err
+	}
+	return s.storage.Delete(ctx, storage.UserScope(userID), fileName)
 }
 
 // GetFileInfo returns detailed information about a specific file
 func (s *Service) GetFileInfo(ctx context.Context, userID int, fileName string) (*FileInfo, error) {
-	bucket := s.bucketPref + strconv.Itoa(userID)
+	if err := storage.ValidateObjectName(fileName); err != nil {
+		return nil, err
+	}
 
-	objInfo, err := s.minio.StatObject(ctx, bucket, fileName, minio.StatObjectOptions{})
+	objInfo, err := s.storage.Stat(ctx, storage.UserScope(userID), fileName)
 	if err != nil {
 		return nil, err
 	}
 
-	url := fmt.Sprintf("http://%s/%s/%s", s.minio.EndpointURL().Host, bucket, fileName)
+	url := fmt.Sprintf("/api/protected/files/%s/%s", s.UserBucketName(userID), fileName)
 
 	return &FileInfo{
 		ID:       fileName,
@@ -573,8 +533,8 @@ func (s *Service) LoginOrRegisterWithGoogle(ctx context.Context, code string) (a
 			return "", "", err
 		}
 
-		// Create their MinIO bucket since they are a new user.
-		_ = s.createMinioBucketForUser(ctx, user.ID)
+		// Prepare their storage namespace since they are a new user.
+		_ = s.ensureUserScope(ctx, user.ID)
 
 	} else {
 		// Case B: User EXISTS in our DB.
@@ -592,30 +552,9 @@ func (s *Service) LoginOrRegisterWithGoogle(ctx context.Context, code string) (a
 	return s.issueAndSaveTokens(user)
 }
 
-// Helper function to create MinIO bucket to avoid code duplication
-func (s *Service) createMinioBucketForUser(ctx context.Context, userID int) error {
-	bucket := s.bucketPref + strconv.Itoa(userID)
-	if ok, _ := s.minio.BucketExists(ctx, bucket); !ok {
-		if err := s.minio.MakeBucket(ctx, bucket, minio.MakeBucketOptions{}); err != nil {
-			return err
-		}
-		policy := fmt.Sprintf(`{
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Action": ["s3:GetObject"],
-                    "Effect": "Allow",
-                    "Principal": "*",
-                    "Resource": ["arn:aws:s3:::%s/*"]
-                }
-            ]
-        }`, bucket)
-		if err := s.minio.SetBucketPolicy(ctx, bucket, policy); err != nil {
-			log.Printf("ERROR: Failed to set bucket policy: %v", err)
-			return err
-		}
-	}
-	return nil
+// Helper function to prepare user storage namespace to avoid code duplication
+func (s *Service) ensureUserScope(ctx context.Context, userID int) error {
+	return s.storage.EnsureScope(ctx, storage.UserScope(userID))
 }
 
 // Helper function to issue and save tokens to avoid code duplication
@@ -691,7 +630,7 @@ func (s *Service) VerifyCode(email, code string) error {
 
 	u, _ := s.store.FindByEmail(email)
 	// Use the helper here
-	return s.createMinioBucketForUser(context.Background(), u.ID)
+	return s.ensureUserScope(context.Background(), u.ID)
 }
 
 // GoogleAuthCodeURL returns the URL for the Google consent page.
@@ -699,7 +638,33 @@ func (s *Service) GoogleAuthCodeURL(state string) string {
 	return s.googleOAuthConfig.AuthCodeURL(state)
 }
 
-func (s *Service) GetFileStream(ctx context.Context, userID int, fileName string) (*minio.Object, error) {
-	bucket := s.bucketPref + strconv.Itoa(userID)
-	return s.minio.GetObject(ctx, bucket, fileName, minio.GetObjectOptions{})
+func (s *Service) GetFileStream(ctx context.Context, userID int, fileName string) (*storage.ObjectReader, error) {
+	if err := storage.ValidateObjectName(fileName); err != nil {
+		return nil, err
+	}
+	return s.storage.Get(ctx, storage.UserScope(userID), fileName)
+}
+
+func (s *Service) UserBucketName(userID int) string {
+	return s.bucketPref + strconv.Itoa(userID)
+}
+
+func (s *Service) ValidateObjectName(name string) error {
+	return storage.ValidateObjectName(name)
+}
+
+func requiredEnv(key string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		log.Fatalf("CRITICAL: Missing required env var: %s", key)
+	}
+	return value
+}
+
+func getEnv(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
 }

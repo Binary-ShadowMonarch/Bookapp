@@ -21,7 +21,7 @@ type RefreshResponse struct {
 func RefreshHandler(svc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("DEBUG: Token refresh request received")
-		
+
 		// only allow POST requests for security
 		if r.Method != http.MethodPost {
 			log.Printf("DEBUG: Refresh method not allowed: %s", r.Method)
@@ -50,6 +50,7 @@ func RefreshHandler(svc *auth.Service) http.HandlerFunc {
 		}
 
 		log.Printf("DEBUG: Tokens refreshed successfully, setting new cookies")
+		secure := secureCookie(r)
 
 		// set the new access token as a secure cookie
 		http.SetCookie(w, &http.Cookie{
@@ -57,7 +58,7 @@ func RefreshHandler(svc *auth.Service) http.HandlerFunc {
 			Value:    newAccessToken,
 			Expires:  time.Now().UTC().Add(auth.AccessTTL),
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   secure,
 			SameSite: http.SameSiteStrictMode,
 			Path:     "/",
 		})
@@ -68,7 +69,7 @@ func RefreshHandler(svc *auth.Service) http.HandlerFunc {
 			Value:    newRefreshToken,
 			Expires:  time.Now().UTC().Add(auth.RefreshTTL),
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   secure,
 			SameSite: http.SameSiteStrictMode,
 			Path:     "/",
 		})

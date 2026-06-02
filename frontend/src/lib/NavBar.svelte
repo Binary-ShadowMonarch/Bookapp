@@ -7,7 +7,6 @@
 </script>
 
 <!-- this is the main navigation bar that stays at the top of the page -->
-<!-- it has a nice blur effect and works in both light and dark mode -->
 <nav
 	class="sticky top-0 left-0 z-30 w-full bg-white/80 shadow backdrop-blur-md dark:border-black/30 dark:bg-black/60"
 >

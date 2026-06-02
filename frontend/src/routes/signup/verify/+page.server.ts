@@ -1,6 +1,7 @@
 // src/routes/signup/verify/+page.server.ts
 import type { Actions, PageServerLoad } from './$types';
 import { fail, redirect } from '@sveltejs/kit';
+import { dev } from '$app/environment';
 
 export const load: PageServerLoad = ({ cookies, url }) => {
 	// Check if user has pending registration
@@ -49,7 +50,7 @@ export const actions: Actions = {
 			cookies.set('registered', 'true', {
 				path: '/',
 				httpOnly: true,
-				secure: true,
+				secure: !dev,
 				maxAge: 60, // 1 minute to access success page
 				sameSite: 'lax'
 			});

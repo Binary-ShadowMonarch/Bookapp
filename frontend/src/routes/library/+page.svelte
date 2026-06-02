@@ -9,7 +9,8 @@
 	import { goto } from '$app/navigation';
 	import { LogOut, Settings, HelpCircle, User, Store } from 'lucide-svelte';
 
-	let { data }: { data: { user: { email: string } } } = $props();
+	type PageData = { user?: { email?: string } };
+	let { data = {} as PageData } = $props() as { data?: PageData };
 
 	// --- TYPE DEFINITIONS ---
 	type BookStatus = 'read' | 'unread' | 'finished';
@@ -53,7 +54,7 @@
 		try {
 			let res = await fetch('/api/protected/profile', { method: 'GET', credentials: 'include' });
 			if (res.status === 401) {
-				const refresh = await fetch('/api/refresh', { method: 'GET', credentials: 'include' });
+				const refresh = await fetch('/api/refresh', { method: 'POST', credentials: 'include' });
 				if (refresh.ok) {
 					res = await fetch('/api/protected/profile', { method: 'GET', credentials: 'include' });
 				}

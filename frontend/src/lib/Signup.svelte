@@ -170,8 +170,7 @@
 					<p class="bottomrow flex items-center justify-center gap-1">
 						Already have an account? <a href="/login">Sign in</a> or
 					</p>
-					<button type="button" class="btn google">
-						<a class="flex gap-2" aria-label="GoogleAuth" href="/api/auth/google/login">
+						<a class="btn google flex gap-2" aria-label="GoogleAuth" href="/api/auth/google/login">
 							<svg
 								version="1.1"
 								width="20"
@@ -211,7 +210,6 @@
 							</svg>
 							<p>Google</p>
 						</a>
-					</button>
 				</div>
 			</div>
 		</div>

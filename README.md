@@ -26,7 +26,7 @@ I went full-stack on this one, which means I probably overcomplicated things but
 
 **Database**: PostgreSQL - Reliable, well-documented, and supports all the features I needed (I didn't even know I could add custom functions and other features in languages like SQL, C, even Python - I never used it but good to know). Plus, it's free and I was introduced to SQLite3 in the course, so PostgreSQL it is.
 
-**File Storage**: MinIO - S3-compatible storage (I didn't know at the time of implementation what this was - I just wanted a way to get users files to their own folder and can't access another folder and an easy way to work with Golang). MinIO provides an official Go Client SDK for interacting with MinIO servers and any Amazon S3 compatible object storage. ChatGPT suggested this, and it's perfect for self-hosting. Companies use this, so if my app grows, I won't regret the choice.
+**File Storage**: SeaweedFS (filer API) - distributed object storage with a simple HTTP interface. The backend proxies access so users stay isolated from each other's data.
 
 **Authentication**: JWT tokens with refresh tokens, plus Google OAuth. The authentication flow was probably the hardest part to get right.
 
@@ -38,7 +38,7 @@ I went full-stack on this one, which means I probably overcomplicated things but
 
 - `NavBar.svelte` - The navigation bar that stays at the top. Pretty straightforward, but it took me way too long to get the responsive design right, and I have SvelteKit slots here. I can import wherever I need and add different buttons. On the homepage there's a logo on the left, nothing in the center, and login/signup on the right. On the library page, it's the same navbar but with search in the center and upload/store on the right with a user icon on the far right. I can toggle the additional view that has filter purposes on the library page but it's hidden on the homepage - could say it's just a sticky black acrylic background with button/elements placeholders.
 
-- `Login.svelte` & `Signup.svelte` - The authentication pages. I added some nice animations and validation because users deserve better than "invalid input" errors. The errors are as helpful as they could be. The signup process asks for email and 8 character password, and sends form (email and password) to backend route /api/register/request( anything with /api would be forwarded to localhost:8080 by nginx) and it responds with ok then the signup page redirects user to /signup/verify page where they enter the 6 digit pin. This submits pin to /api/register/verify - the pin will be sent to their provided email using SendGrid API service. The backend saves the code in db(email_verifications table). The /api/register/verify expects mail and code, and checks for the code and mail match in email_verification table, and if matched, creates user and minio bucket then redirects to success page, where user can go to login or home page. 
+- `Login.svelte` & `Signup.svelte` - The authentication pages. I added some nice animations and validation because users deserve better than "invalid input" errors. The errors are as helpful as they could be. The signup process asks for email and 8 character password, and sends form (email and password) to backend route /api/register/request( anything with /api would be forwarded to localhost:8080 by nginx) and it responds with ok then the signup page redirects user to /signup/verify page where they enter the 6 digit pin. This submits pin to /api/register/verify - the pin will be sent to their provided email using Resend. The backend saves the code in db(email_verifications table). The /api/register/verify expects mail and code, and checks for the code and mail match in email_verification table, and if matched, creates user and storage namespace then redirects to success page, where user can go to login or home page. 
 The pages /signup/verify and signup/success are one time pages for signup only and cannot be visited as Svelte guards it with tokens. The token "pending" is set by signup page, and verify page checks for that, extracts mail from URL and deletes that token so if user reloads the page or tries to access that page without signup redirection, they will be redirected to signup page and after the successful verification, it creates another token "registered" and redirects to /signup/success page, it checks for the registered token shows the page and deletes it.
 
 - `BookCard.svelte` - Each book gets its own card with a cover image, title, author, and reading progress. I'm pretty proud of the hover effects on this one. And upon hover it shows open button that opens the reader. I load this on page load with all the books fetched and parsed from /api/protected/library. This returns file URLs and EPUB.js parses it. If there is no provided cover, I have one for default, a burning candle.
@@ -59,11 +59,11 @@ The pages /signup/verify and signup/success are one time pages for signup only a
 
 - `library.go` - Manages the book library, file operations, and user permissions. Users can only access their own books. There are some empty/dummy functions as well for future features I plan to implement.
 
-- `upload.go` - Handles file uploads to MinIO. I added proper validation and error handling because users will upload anything.
+- `upload.go` - Handles file uploads to SeaweedFS. I added proper validation and error handling because users will upload anything.
 
 - `refresh.go` & `logout.go` - Token management. The refresh token system prevents users from getting logged out every 15 minutes. When requested with valid refresh token the refresh route /api/refresh checks for the refresh tokens in table refresh_tokens, removes used refresh token and issues fresh set of tokens if matched with gmail and token else, returns unauthorized. The logout expires and removes the refresh tokens from database.
 
-- `request_verify.go` & `verify.go`** - These are part of the signup process. the request_verify.go ensures there are no duplicate emails, and handles sending 6 digit pin code to that email and saving it in the email_verifications table. The verify.go looks for the matching email and code, and if found creates users and bucket for that user.
+- `request_verify.go` & `verify.go`** - These are part of the signup process. the request_verify.go ensures there are no duplicate emails, and handles sending 6 digit pin code to that email and saving it in the email_verifications table. The verify.go looks for the matching email and code, and if found creates users and storage namespace for that user.
 
 - **`backend/internal/auth/`** - The security stuff:
 
@@ -99,7 +99,7 @@ if err := row.Scan(&hashedPw); err != nil {
 - SvelteKit (port 3000) frontend
 - Go backend (port 8080)
 - PostgreSQL database (port 5432)
-- MinIO file storage (port 9000/9001)
+- SeaweedFS filer storage (internal port 8888)
 - Automatic database backups (because losing data is not cool. I also have not looked into how I would use them 😆)
 
 ## Key Features (The Stuff That Actually Works)
@@ -114,7 +114,7 @@ The reader component is probably the most complex part. It uses EPUB.js to rende
 
 ### File Management
 
-Users can upload EPUB files, and the system automatically extracts metadata (title, author, cover image) using a web worker pool and creates a new book card for the newly added books. The web worker parses super fast, and doesn't freeze the UI when parsing large books. Files are stored in MinIO with proper access controls - users can only access their own books.
+Users can upload EPUB files, and the system automatically extracts metadata (title, author, cover image) using a web worker pool and creates a new book card for the newly added books. The web worker parses super fast, and doesn't freeze the UI when parsing large books. Files are stored in SeaweedFS with proper access controls - users can only access their own books.
 
 ### Responsive Design
 
@@ -128,15 +128,15 @@ I was originally planning to use Electron or Tauri for cross-platform developmen
 
 ### Why Go for the Backend?
 
-I started with a simple Go auth tutorial from YouTube, but it evolved into something much more complex. I appreciate Go's simplicity and the fact that it compiles to a single binary and is fast (faster than interpreted) and no memory management like C. The standard library is comprehensive, and there's official support for things like MinIO (which I didn't know when I chose Go). The main reason was file uploads and concurrency; I tried to use parallel processes in Python for the CS50 finance problem set, but at that time I couldn't get it to work.
+I started with a simple Go auth tutorial from YouTube, but it evolved into something much more complex. I appreciate Go's simplicity and the fact that it compiles to a single binary and is fast (faster than interpreted) and no memory management like C. The standard library is comprehensive, and the HTTP ecosystem makes it easy to talk to services like SeaweedFS. The main reason was file uploads and concurrency; I tried to use parallel processes in Python for the CS50 finance problem set, but at that time I couldn't get it to work.
 
 ### Why PostgreSQL?
 
 I was introduced to SQLite in the course, and PostgreSQL felt like the natural next step for a full-featured, reliable, and open-source relational database. I used Docker version of Postgres because I wanted to use Docker for the deployment. I had some experience with Portainer (Docker container manager with web UI) just deploying and tinkering in VM.
 
-### Why MinIO?
+### Why SeaweedFS?
 
-I wanted S3-compatible storage for reliable backup for the future just in case. ChatGPT suggested this, and it's perfect for self-hosting. Companies use this, so if my app grows, I won't regret the choice.
+I wanted a self-hosted, distributed storage system with a simple filer API and room to scale later. SeaweedFS gives me a global namespace, fast uploads, and a clean path toward marketplace-style shared storage.
 
 ## The Struggles (Because Nothing Works on the First Try)
 
@@ -210,11 +210,11 @@ I mostly used curl and scripts for testing the backend (like the `checker.sh` sc
 
 ## How to Run This Thing
 
-1. Get the source file and Open .env_template then fill in your configuration(as per the names) and save it as .env 
-2. Run `docker-compose --env-file ./.env up --build -d`
+1. Copy .env_template to .env.local and fill in your configuration.
+2. Run `docker compose --env-file ./.env.local -f docker-compose.dev.yml up --build -d`
 3. Visit `http://localhost:4353`
 
-The setup is pretty straightforward thanks to Docker, but you'll need to configure Google OAuth (authorized JS origin, callbacks and redirect URLs) and SendGrid (for local accounts) for email verification if you want all the features to work.
+The setup is pretty straightforward thanks to Docker, but you'll need to configure Google OAuth (authorized JS origin, callbacks and redirect URLs) and Resend (for local accounts) for email verification if you want all the features to work.
 
 ## Deployment
 

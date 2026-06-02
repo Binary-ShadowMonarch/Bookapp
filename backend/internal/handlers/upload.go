@@ -20,7 +20,7 @@ type UploadResponse struct {
 func UploadHandler(svc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("DEBUG: Upload request received")
-		
+
 		// make sure the user is logged in before they can upload
 		email, err := svc.Authorize(r)
 		if err != nil {
@@ -58,7 +58,7 @@ func UploadHandler(svc *auth.Service) http.HandlerFunc {
 
 		log.Printf("DEBUG: Uploading file %s (%d bytes) for user %d", header.Filename, header.Size, u.ID)
 
-		// upload the file to my storage (MinIO)
+		// upload the file to my storage
 		// this saves the book file in the user's personal folder
 		url, err := svc.UploadFile(context.Background(), u.ID, file, header)
 		if err != nil {

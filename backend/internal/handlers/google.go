@@ -28,6 +28,7 @@ func GoogleLoginHandler(svc *auth.Service) http.HandlerFunc {
 		state := base64.URLEncoding.EncodeToString(b)
 
 		log.Printf("DEBUG: Generated OAuth state: %s", state)
+		secure := secureCookie(r)
 
 		// store the state in a cookie so I can verify it later
 		// this cookie expires in 10 minutes for security
@@ -37,7 +38,7 @@ func GoogleLoginHandler(svc *auth.Service) http.HandlerFunc {
 			Expires:  time.Now().UTC().Add(3 * time.Minute),
 			HttpOnly: true,
 			Path:     "/",
-			Secure:   true, // needs HTTPS in production
+			Secure:   secure,
 			SameSite: http.SameSiteLaxMode,
 		})
 
@@ -105,6 +106,7 @@ func GoogleCallbackHandler(svc *auth.Service) http.HandlerFunc {
 		}
 
 		log.Printf("DEBUG: Google login successful, setting cookies")
+		secure := secureCookie(r)
 
 		// set the access token as a secure cookie
 		// this is the same as regular login
@@ -113,7 +115,7 @@ func GoogleCallbackHandler(svc *auth.Service) http.HandlerFunc {
 			Value:    accessToken,
 			Expires:  time.Now().UTC().Add(auth.AccessTTL),
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   secure,
 			SameSite: http.SameSiteStrictMode,
 			Path:     "/",
 		})
@@ -124,7 +126,7 @@ func GoogleCallbackHandler(svc *auth.Service) http.HandlerFunc {
 			Value:    refreshToken,
 			Expires:  time.Now().UTC().Add(auth.RefreshTTL),
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   secure,
 			SameSite: http.SameSiteStrictMode,
 			Path:     "/",
 		})

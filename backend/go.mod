@@ -8,8 +8,6 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
-	github.com/minio/minio-go/v7 v7.0.94
-	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 )
 
 require (

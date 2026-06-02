@@ -14,7 +14,7 @@ import (
 func LoginHandler(svc *auth.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("DEBUG: Login attempt received")
-		
+
 		// only allow POST requests for login (security thing)
 		if r.Method != http.MethodPost {
 			log.Println("DEBUG: Login failed - wrong HTTP method:", r.Method)
@@ -26,7 +26,7 @@ func LoginHandler(svc *auth.Service) http.HandlerFunc {
 		// these come from the frontend login form
 		mail := r.FormValue("mail")
 		pw := r.FormValue("password")
-		
+
 		log.Printf("DEBUG: Attempting login for email: %s", mail)
 
 		// try to authenticate the user with my auth service
@@ -39,6 +39,7 @@ func LoginHandler(svc *auth.Service) http.HandlerFunc {
 		}
 
 		log.Printf("DEBUG: Login successful for %s, setting cookies", mail)
+		secure := secureCookie(r)
 
 		// set the access token as a secure cookie
 		// this token is used to prove the user is logged in
@@ -48,7 +49,7 @@ func LoginHandler(svc *auth.Service) http.HandlerFunc {
 			Value:    accessToken,
 			Expires:  time.Now().UTC().Add(auth.AccessTTL),
 			HttpOnly: true,
-			Secure:   true, // needs HTTPS in production
+			Secure:   secure,
 			SameSite: http.SameSiteStrictMode,
 			Path:     "/",
 		})
@@ -61,7 +62,7 @@ func LoginHandler(svc *auth.Service) http.HandlerFunc {
 			Value:    refreshToken,
 			Expires:  time.Now().UTC().Add(auth.RefreshTTL),
 			HttpOnly: true,
-			Secure:   true, // needs HTTPS in production
+			Secure:   secure,
 			SameSite: http.SameSiteStrictMode,
 			Path:     "/",
 		})

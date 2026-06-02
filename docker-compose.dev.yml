@@ -27,7 +27,7 @@ services:
       - PORT=3000
       # SvelteKit app can use this to know where the API is
       - PUBLIC_API_URL=/api
-      # - ORIGIN=https://books.saurabpoudel.com.np
+      # - ORIGIN=https://books.saurabp.com.np
       - ORIGIN=http://localhost:4353
     volumes:
       - ./frontend:/app
@@ -44,19 +44,8 @@ services:
     container_name: bookapp-backend-dev
     restart: always
     working_dir: /app
-    environment:
-      # Use variables from the .env file
-      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
-      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
-      - MINIO_USE_SSL=false
-      - JWT_SECRET=${JWT_SECRET}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-      - GOOGLE_REDIRECT_URL=${GOOGLE_REDIRECT_URL}
-      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
-      - SENDGRID_EMAIL=${SENDGRID_EMAIL}
+    env_file:
+      - .env.local
     volumes:
       - ./backend:/app
       - go-mod-cache:/go/pkg/mod
@@ -64,65 +53,77 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      minio:
+      seaweedfs-filer:
         condition: service_started
     networks:
       - internal
 
   # PostgreSQL Database Service
   db:
-    image: postgres:latest
+    image: postgres:15
     container_name: bookapp-db-dev
     restart: always
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+    env_file:
+      - .env.local
     volumes:
       # Mounts a named volume to the standard postgres data directory
       - pgdata:/var/lib/postgresql/data
       # Mounts the init script to run on first launch
       - ./db-init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER" ]
       interval: 10s
       timeout: 5s
       retries: 10
     networks:
       - internal
 
-  # Minio File Storage Service
-  minio:
-    image: minio/minio:latest
-    container_name: bookapp-minio-dev
+  # SeaweedFS Storage Services
+  seaweedfs-master:
+    image: chrislusf/seaweedfs:latest
+    container_name: bookapp-seaweedfs-master-dev
     restart: always
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: master -ip=seaweedfs-master -port=9333
     volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    # Note: Ports 9000/9001 are not exposed to the host.
-    # The 'backend' service will access it via the internal network.
-    # If you need to access the Minio console from your host, add:
-    # ports:
-    #   - "9001:9001"
+      - seaweedfs_master_data:/data
+    networks:
+      - internal
+
+  seaweedfs-volume:
+    image: chrislusf/seaweedfs:latest
+    container_name: bookapp-seaweedfs-volume-dev
+    restart: always
+    command: volume -mserver=seaweedfs-master:9333 -port=8080 -ip=seaweedfs-volume -dir=/data
+    depends_on:
+      - seaweedfs-master
+    volumes:
+      - seaweedfs_volume_data:/data
+    networks:
+      - internal
+
+  seaweedfs-filer:
+    image: chrislusf/seaweedfs:latest
+    container_name: bookapp-seaweedfs-filer-dev
+    restart: always
+    command: filer -master=seaweedfs-master:9333 -port=8888 -ip=seaweedfs-filer -dir=/data
+    depends_on:
+      - seaweedfs-master
+      - seaweedfs-volume
+    volumes:
+      - seaweedfs_filer_data:/data
     networks:
       - internal
 
   # Database Backup Service
   db-backup:
-    image: postgres:latest
+    image: postgres:15
     container_name: bookapp-db-backup-dev
     restart: always
     depends_on:
       db:
         condition: service_healthy
-    environment:
-      PGPASSWORD: ${POSTGRES_PASSWORD}
-      PGUSER: ${POSTGRES_USER}
-      PGDATABASE: ${POSTGRES_DB}
-      PGHOST: db # Service name of the database
+    env_file:
+      - .env.local
     volumes:
       - ./backups:/backups
     entrypoint: >
@@ -141,8 +142,10 @@ services:
 
 volumes:
   pgdata:
-  minio_data:
   go-mod-cache:
+  seaweedfs_master_data:
+  seaweedfs_volume_data:
+  seaweedfs_filer_data:
 
 
 networks:

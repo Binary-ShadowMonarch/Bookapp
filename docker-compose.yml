@@ -44,20 +44,18 @@ services:
     environment:
       # Use variables from the .env file
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
-      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
-      - MINIO_USE_SSL=false
+      - SEAWEEDFS_FILER_URL=${SEAWEEDFS_FILER_URL}
+      - SEAWEEDFS_BASE_PATH=${SEAWEEDFS_BASE_PATH}
       - JWT_SECRET=${JWT_SECRET}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - GOOGLE_REDIRECT_URL=${GOOGLE_REDIRECT_URL}
-      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
-      - SENDGRID_EMAIL=${SENDGRID_EMAIL}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - RESEND_EMAIL=${RESEND_EMAIL}
     depends_on:
       db:
         condition: service_healthy
-      minio:
+      seaweedfs-filer:
         condition: service_started
     networks:
       - internal
@@ -84,28 +82,45 @@ services:
     networks:
       - internal
 
-  # Minio File Storage Service
-  minio:
-    image: minio/minio:latest
-    container_name: bookapp-minio
+  # SeaweedFS Storage Services
+  seaweedfs-master:
+    image: chrislusf/seaweedfs:latest
+    container_name: bookapp-seaweedfs-master
     restart: always
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: master -ip=seaweedfs-master -port=9333
     volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    # Note: Ports 9000/9001 are not exposed to the host.
-    # The 'backend' service will access it via the internal network.
-    # If you need to access the Minio console from your host, add:
-    # ports:
-    #   - "9001:9001"
+      - seaweedfs_master_data:/data
+    networks:
+      - internal
+
+  seaweedfs-volume:
+    image: chrislusf/seaweedfs:latest
+    container_name: bookapp-seaweedfs-volume
+    restart: always
+    command: volume -mserver=seaweedfs-master:9333 -port=8080 -ip=seaweedfs-volume -dir=/data
+    depends_on:
+      - seaweedfs-master
+    volumes:
+      - seaweedfs_volume_data:/data
+    networks:
+      - internal
+
+  seaweedfs-filer:
+    image: chrislusf/seaweedfs:latest
+    container_name: bookapp-seaweedfs-filer
+    restart: always
+    command: filer -master=seaweedfs-master:9333 -port=8888 -ip=seaweedfs-filer -dir=/data
+    depends_on:
+      - seaweedfs-master
+      - seaweedfs-volume
+    volumes:
+      - seaweedfs_filer_data:/data
     networks:
       - internal
 
   # Database Backup Service
   db-backup:
-    image: postgres:latest
+    image: postgres:15
     container_name: bookapp-db-backup
     restart: always
     depends_on:
@@ -134,7 +149,9 @@ services:
 
 volumes:
   pgdata:
-  minio_data:
+  seaweedfs_master_data:
+  seaweedfs_volume_data:
+  seaweedfs_filer_data:
 
 networks:
   internal:

@@ -13,10 +13,11 @@ import (
 )
 
 func main() {
-	godotenv.Load()
+	_ = godotenv.Load(".env.local")
+	_ = godotenv.Load()
 	// load DSN from ENV
 	dsn := os.Getenv("DATABASE_URL")
-	// log.Printf("MINIO_ENDPOINT=%q", dsn)
+	// log.Printf("DATABASE_URL=%q", dsn)
 	pgStore, err := store.NewPostgresStore(dsn)
 	if err != nil {
 		log.Fatal(err)

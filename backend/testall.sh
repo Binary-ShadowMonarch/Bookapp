@@ -15,12 +15,8 @@ DB_PORT="5432"
 DB_USER="admin"
 DB_NAME="bookapp"
 
-# MinIO + mc client (mc must be installed:
-# https://docs.min.io/docs/minio-client-quickstart-guide)
-MC_ALIAS="local"
-MINIO_ENDPOINT="localhost:9000"
-MINIO_KEY="admin"
-MINIO_SECRET="secretpassword"
+# SeaweedFS filer
+SEAWEEDFS_FILER="localhost:8888"
 
 # ─── 1) REGISTER VIA API ─────────────────────────────────────────────────────
 echo "1) Registering user $EMAIL…"
@@ -40,14 +36,12 @@ else
   echo " → User not found in database"; exit 1
 fi
 
-# ─── 3) VERIFY MINIO BUCKET ──────────────────────────────────────────────────
-echo "3) Checking bucket user-${USER_ID} in MinIO…"
-mc alias set $MC_ALIAS http://${MINIO_ENDPOINT} $MINIO_KEY $MINIO_SECRET --api S3v4 >/dev/null
-
-if mc ls $MC_ALIAS | grep -q "user-${USER_ID}/"; then
-  echo " → Bucket user-${USER_ID} exists"
+# ─── 3) VERIFY SEAWEEDFS FILER ───────────────────────────────────────────────
+echo "3) Checking SeaweedFS filer health…"
+if curl -sf "http://${SEAWEEDFS_FILER}/" >/dev/null; then
+  echo " → SeaweedFS filer is reachable"
 else
-  echo " → Bucket user-${USER_ID} is missing"; exit 1
+  echo " → SeaweedFS filer is not reachable"; exit 1
 fi
 
 echo "✅ All integration checks passed!"
