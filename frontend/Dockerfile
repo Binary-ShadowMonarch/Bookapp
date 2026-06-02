@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # ---- Dependencies Stage ----
-FROM --platform=$BUILDPLATFORM node:24-alpine AS deps
+FROM --platform=$BUILDPLATFORM node:lts-alpine3.22 AS deps
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 COPY package.json pnpm-lock.yaml .npmrc ./
@@ -9,7 +9,7 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
 	pnpm install --frozen-lockfile
 
 # ---- Builder Stage ----
-FROM --platform=$BUILDPLATFORM node:24-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:lts-alpine3.22 AS builder
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 COPY --from=deps /app/node_modules ./node_modules
@@ -17,7 +17,7 @@ COPY . .
 RUN pnpm build
 
 # ---- Final Stage ----
-FROM node:24-alpine AS final
+FROM node:lts-alpine3.22 AS final
 WORKDIR /app
 ENV NODE_ENV=production
 RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
