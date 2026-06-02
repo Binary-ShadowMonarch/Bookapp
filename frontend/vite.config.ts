@@ -4,7 +4,6 @@ import { defineConfig } from 'vite';
 import { enhancedImages } from '@sveltejs/enhanced-img';
 
 export default defineConfig({
-	server: {
-	},
+	server: {},
 	plugins: [tailwindcss(), enhancedImages(), sveltekit()]
 });
