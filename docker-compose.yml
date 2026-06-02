@@ -109,7 +109,7 @@ services:
     image: chrislusf/seaweedfs:latest
     container_name: bookapp-seaweedfs-filer
     restart: always
-    command: filer -master=seaweedfs-master:9333 -port=8888 -ip=seaweedfs-filer -dir=/data
+    command: filer -master=seaweedfs-master:9333 -port=8888
     depends_on:
       - seaweedfs-master
       - seaweedfs-volume
