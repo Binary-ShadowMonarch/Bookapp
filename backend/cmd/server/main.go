@@ -13,7 +13,7 @@ import (
 )
 
 func main() {
-	_ = godotenv.Load(".env.local")
+	_ = godotenv.Load(".env")
 	_ = godotenv.Load()
 	// load DSN from ENV
 	dsn := os.Getenv("DATABASE_URL")
