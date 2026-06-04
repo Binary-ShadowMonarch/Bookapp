@@ -18,7 +18,7 @@ services:
 
   # SvelteKit Frontend Service - Development Mode
   frontend:
-    image: node:20-alpine
+    image: node:lts-alpine3.22
     container_name: bookapp-frontend-dev
     restart: always
     working_dir: /app

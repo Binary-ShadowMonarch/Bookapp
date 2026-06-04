@@ -124,11 +124,13 @@ func (s *SeaweedFSFiler) List(ctx context.Context, scope Scope) ([]ObjectInfo, e
 		return nil, err
 	}
 
-	url := s.urlForPath(prefix) + "?limit=10000"
+	directoryURL := s.urlForPath(strings.TrimSuffix(prefix, "/") + "/")
+	url := directoryURL + "?limit=10000"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := s.client.Do(req)
 	if err != nil {
