@@ -1,55 +1,58 @@
 services:
   # Nginx Reverse Proxy - The single entry point for your app
-  nginx:
-    image: nginx:1.27-alpine
-    container_name: bookapp-proxy-dev
-    restart: always
-    ports:
-      # Maps host port 80 to nginx container port 80.
-      # Change "80:80" to "8888:80" if port 80 is taken on your host.
-      - "4353:80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - backend
-      - frontend
-    networks:
-      - internal
+  # nginx:
+  #   image: nginx:1.27-alpine
+  #   container_name: bookapp-proxy-dev
+  #   restart: always
+  #   ports:
+  #     # Maps host port 80 to nginx container port 80.
+  #     # Change "80:80" to "8888:80" if port 80 is taken on your host.
+  #     - "4353:80"
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  #   depends_on:
+  #     - backend
+  #     - frontend
+  #   networks:
+  #     - internal
 
-  # SvelteKit Frontend Service - Development Mode
+    # SvelteKit Frontend Service - Development Mode
   frontend:
     image: node:lts-alpine3.22
     container_name: bookapp-frontend-dev
-    restart: always
     working_dir: /app
+    restart: unless-stopped
     environment:
-      # The Node adapter inside the container listens on port 3000
-      - PORT=3000
-      # SvelteKit app can use this to know where the API is
-      - PUBLIC_API_URL=/api
-      # - ORIGIN=https://books.saurabp.com.np
-      - ORIGIN=http://localhost:4353
+      PORT: 3000
+      HOST: 0.0.0.0
+      PUBLIC_API_URL: /api
+      API_INTERNAL_URL: http://backend:8080
     volumes:
       - ./frontend:/app
-      - /app/node_modules
+      - frontend_node_modules:/app/node_modules
+      - pnpm_store:/root/.local/share/pnpm/store
     command: sh -c "npm i -g pnpm && pnpm install && pnpm dev --host 0.0.0.0 --port 3000"
+    ports:
+      - "3000:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_started
     networks:
       - internal
 
-  # Go Backend Service - Development Mode
   backend:
-    image: golang:1.24.5-bookworm
+    image: golang:1.25-bookworm
     container_name: bookapp-backend-dev
-    restart: always
     working_dir: /app
+    restart: unless-stopped
     env_file:
       - .env.local
     volumes:
       - ./backend:/app
       - go-mod-cache:/go/pkg/mod
-    command: sh -c "go mod download && go run ./cmd/server/main.go"
+    command: sh -c "go install github.com/air-verse/air@v1.64.0 && air"
+    ports:
+      - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
@@ -104,8 +107,8 @@ services:
   seaweedfs-filer:
     image: chrislusf/seaweedfs:latest
     container_name: bookapp-seaweedfs-filer-dev
-    restart: always
-    command: filer -master=seaweedfs-master:9333 -port=8888 -ip=seaweedfs-filer -dir=/data
+    restart: unless-stopped
+    command: filer -master=seaweedfs-master:9333 -port=8888 -ip=seaweedfs-filer -defaultStoreDir=/data
     depends_on:
       - seaweedfs-master
       - seaweedfs-volume
@@ -143,10 +146,11 @@ services:
 volumes:
   pgdata:
   go-mod-cache:
+  frontend_node_modules:
+  pnpm_store:
   seaweedfs_master_data:
   seaweedfs_volume_data:
   seaweedfs_filer_data:
-
 
 networks:
   internal:

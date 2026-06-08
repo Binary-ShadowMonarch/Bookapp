@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -30,6 +31,7 @@ func NewSeaweedFSFiler(cfg SeaweedFSConfig) (*SeaweedFSFiler, error) {
 		return nil, fmt.Errorf("seaweedfs filer url is required")
 	}
 	basePath := normalizeBasePath(cfg.BasePath)
+
 	client := &http.Client{Timeout: cfg.Timeout}
 	if cfg.Timeout == 0 {
 		client.Timeout = 30 * time.Second
@@ -126,6 +128,7 @@ func (s *SeaweedFSFiler) List(ctx context.Context, scope Scope) ([]ObjectInfo, e
 
 	directoryURL := s.urlForPath(strings.TrimSuffix(prefix, "/") + "/")
 	url := directoryURL + "?limit=10000"
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -155,6 +158,7 @@ func (s *SeaweedFSFiler) List(ctx context.Context, scope Scope) ([]ObjectInfo, e
 		if entry.IsDirectory {
 			continue
 		}
+
 		name := entry.Name
 		if name == "" && entry.FullPath != "" {
 			name = path.Base(entry.FullPath)
@@ -162,11 +166,12 @@ func (s *SeaweedFSFiler) List(ctx context.Context, scope Scope) ([]ObjectInfo, e
 		if name == "" {
 			continue
 		}
+
 		objects = append(objects, ObjectInfo{
 			Key:          name,
 			Size:         entry.Size,
 			ContentType:  entry.Mime,
-			LastModified: unixSecondsToTime(entry.Mtime),
+			LastModified: entry.Mtime.Time(),
 		})
 	}
 
@@ -273,12 +278,64 @@ type filerListResponse struct {
 }
 
 type filerEntry struct {
-	Name        string `json:"Name"`
-	FullPath    string `json:"FullPath"`
-	IsDirectory bool   `json:"IsDirectory"`
-	Size        int64  `json:"Size"`
-	Mime        string `json:"Mime"`
-	Mtime       int64  `json:"Mtime"`
+	Name        string           `json:"Name"`
+	FullPath    string           `json:"FullPath"`
+	IsDirectory bool             `json:"IsDirectory"`
+	Size        int64            `json:"Size"`
+	Mime        string           `json:"Mime"`
+	Mtime       flexibleUnixTime `json:"Mtime"`
+}
+
+type flexibleUnixTime int64
+
+func (t *flexibleUnixTime) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		*t = 0
+		return nil
+	}
+
+	// Accept both quoted and unquoted values.
+	if len(data) > 0 && data[0] == '"' {
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		s = strings.TrimSpace(s)
+		if s == "" {
+			*t = 0
+			return nil
+		}
+
+		// Most likely SeaweedFS unix seconds in string form.
+		if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+			*t = flexibleUnixTime(n)
+			return nil
+		}
+
+		// Fall back to RFC timestamps if the endpoint ever switches formats.
+		if parsed, err := time.Parse(time.RFC3339Nano, s); err == nil {
+			*t = flexibleUnixTime(parsed.Unix())
+			return nil
+		}
+		if parsed, err := time.Parse(time.RFC3339, s); err == nil {
+			*t = flexibleUnixTime(parsed.Unix())
+			return nil
+		}
+
+		return fmt.Errorf("unsupported SeaweedFS Mtime value: %q", s)
+	}
+
+	var n int64
+	if err := json.Unmarshal(data, &n); err != nil {
+		return err
+	}
+	*t = flexibleUnixTime(n)
+	return nil
+}
+
+func (t flexibleUnixTime) Time() time.Time {
+	return unixSecondsToTime(int64(t))
 }
 
 func unixSecondsToTime(value int64) time.Time {

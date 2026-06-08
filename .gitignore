@@ -23,3 +23,5 @@ node_modules/
 
 # OS-generated 
 .DS_Store
+
+.air.toml
